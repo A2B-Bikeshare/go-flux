@@ -1,0 +1,204 @@
+package fluxlog
+
+import (
+	"bytes"
+	"encoding/json"
+	capn "github.com/glycerine/go-capnproto"
+	"testing"
+)
+
+const (
+	testName    = "testName"
+	testLevel   = WARN
+	testMessage = "testMessage here!"
+)
+
+func MakeLogMsg() *capn.Segment {
+	buf := make([]byte, 0, 100)
+	seg := capn.NewBuffer(buf)
+	LogMsgtoSegment(seg, testName, testLevel, testMessage)
+	return seg
+}
+
+func TestMakeCapLog(t *testing.T) {
+	seg := MakeLogMsg()
+	entry := ReadRootCapEntry(seg)
+
+	if entry.Name() != testName {
+		t.Fatalf("Expected Name()=%q, got %q", testName, entry.Name())
+	}
+
+	cols := entry.Columns()
+	if cols.Len() != 3 {
+		t.Fatalf("Expected 3 column names, got %d", cols.Len())
+	}
+	if cols.At(0) != "time" {
+		t.Fatalf("Expected %q as first column name, found %q", "time", cols.At(0))
+	}
+	if cols.At(1) != "level" {
+		t.Fatalf("Expected %q as second column name, found %q", "level", cols.At(1))
+	}
+	if cols.At(2) != "message" {
+		t.Fatalf("Expected %q as third column name, found %q", "message", cols.At(2))
+	}
+
+	points := entry.Points()
+	if points.Len() != 3 {
+		t.Fatalf("Expected 3 points, got %d", points.Len())
+	}
+	pointSlice := entry.Points().ToArray()
+	if pointSlice[0].Which() != POINTST_INT {
+		t.Fatalf("Expected first point 'which' to be 0, got %d", pointSlice[0].Which())
+	}
+	t.Logf("Got timetsamp: %d", pointSlice[0].Int())
+	if pointSlice[1].Which() != POINTST_INT {
+		t.Fatalf("Expected second point 'which' to be 0, got %d", pointSlice[1].Which())
+	}
+	if pointSlice[1].Int() != int64(testLevel) {
+		t.Fatalf("Expected second point to be 0, got %d", pointSlice[1].Int())
+	}
+	if pointSlice[2].Which() != POINTST_TEXT {
+		t.Fatalf("Expected third point 'which' to be 2, got %d", pointSlice[2].Which())
+	}
+	if pointSlice[2].Text() != testMessage {
+		t.Fatalf("Expected message %q, got %q", testMessage, pointSlice[2].Text())
+	}
+	return
+}
+
+func TestCapLogMarshal(t *testing.T) {
+	seg := MakeLogMsg()
+	buf := bytes.NewBuffer(nil)
+	entry := ReadRootCapEntry(seg)
+	smp := make(map[string]interface{})
+	dec := json.NewDecoder(buf)
+	dec.UseNumber()
+	err := entry.WriteJSON(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(buf.String())
+	err = dec.Decode(&smp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Unmarshaled element: #%v", smp)
+
+	//TEST NAME
+	name, ok := smp["name"]
+	if !ok {
+		t.Fatal("'name' not found in unmarshalled map")
+	}
+	if name != testName {
+		t.Fatalf("Expected %q for 'name', got %q", testName, name)
+	}
+
+	//TEST COLUMNS
+	cols, ok := smp["columns"]
+	if !ok {
+		t.Fatal("'columns' not found in unmarshalled map")
+	}
+	colslice, ok := cols.([]interface{})
+	if !ok {
+		t.Fatal("'columns' could not be cast to []interface{}")
+	}
+	if len(colslice) != 3 {
+		t.Fatal("'columns' not the right length")
+	}
+	if colslice[0].(string) != "time" {
+		t.Fatalf("Expected 'time', got %q", colslice[0])
+	}
+	if colslice[1].(string) != "level" {
+		t.Fatalf("Expected 'level', got %q", colslice[1])
+	}
+	if colslice[2].(string) != "message" {
+		t.Fatalf("Expected 'message', got %q", colslice[2])
+	}
+
+	//TEST POINTS
+	pts, ok := smp["points"]
+	if !ok {
+		t.Fatal("'points' not found in unmarshalled map")
+	}
+	ptslice, ok := pts.([]interface{})
+	if !ok {
+		t.Fatal("'points' could not be cast to []interface{}")
+	}
+	if time, err := ptslice[0].(json.Number).Int64(); err == nil {
+		t.Logf("Got timestamp %d", time)
+	} else {
+		t.Fatal("First 'points' element could not be cast to int64")
+	}
+	if level, err := ptslice[1].(json.Number).Int64(); err == nil {
+		if level != int64(testLevel) {
+			t.Fatalf("Expected level %d, got level %d", testLevel, level)
+		}
+	} else {
+		t.Fatal("Second 'points' element could not be cast to int64")
+	}
+	if msg, ok := ptslice[2].(string); ok {
+		if msg != testMessage {
+			t.Fatalf("Expected message %q, got message %q", testMessage, msg)
+		}
+	} else {
+		t.Fatal("Third 'points' element could not be cast to string")
+	}
+	return
+}
+
+func TestCapLogMarshalElasticSearch(t *testing.T) {
+	seg := MakeLogMsg()
+	buf := bytes.NewBuffer(nil)
+	entry := ReadRootCapEntry(seg)
+	smp := make(map[string]interface{})
+	dec := json.NewDecoder(buf)
+	dec.UseNumber()
+	err := entry.WriteESJSON(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(buf.String())
+	err = dec.Decode(&smp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Unmarshaled element: #%v", smp)
+
+	for key, val := range smp {
+		switch key {
+		case "name":
+			name, ok := val.(string)
+			if !ok {
+				t.Fatal("Couldn't cast 'name' value to string")
+			}
+			if name != testName {
+				t.Fatalf("Expected %q, got %q", testName, name)
+			}
+		case "time":
+			time, err := val.(json.Number).Int64()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("Got timestamp %d", time)
+		case "level":
+			if level, err := val.(json.Number).Int64(); err == nil {
+				if level != int64(testLevel) {
+					t.Fatalf("Expected %d, got %d", testLevel, level)
+				}
+			} else {
+				t.Fatal("Couldn't cast 'level' to int64")
+			}
+		case "message":
+			if msg, ok := val.(string); ok {
+				if msg != testMessage {
+					t.Fatalf("Expected %q, got %q", testMessage, msg)
+				}
+			} else {
+				t.Fatal("Couldn't cast 'msg' to string")
+			}
+		default:
+			t.Fatalf("Unkown element %q in unmarshalled map", key)
+		}
+	}
+	return
+}
