@@ -3,7 +3,7 @@ package fluxlog
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	//	"encoding/json"
 	C "github.com/glycerine/go-capnproto"
 	"io"
 	"math"
@@ -28,8 +28,8 @@ func (s CapEntry) SetPoints(v PointsT_List)  { C.Struct(s).SetObject(2, C.Object
 func (s CapEntry) WriteJSON(w io.Writer) error {
 	b := bufio.NewWriter(w)
 	var err error
-	var buf []byte
-	_ = buf
+	//	var buf []byte
+	//	_ = buf
 	err = b.WriteByte('{')
 	if err != nil {
 		return err
@@ -38,17 +38,24 @@ func (s CapEntry) WriteJSON(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	{
-		s := s.Name()
-		buf, err = json.Marshal(s)
-		if err != nil {
-			return err
-		}
-		_, err = b.Write(buf)
-		if err != nil {
-			return err
-		}
+
+	_, err = b.Write(strconv.AppendQuote([]byte{}, s.Name()))
+	if err != nil {
+		return err
 	}
+	/*
+		{
+			s := s.Name()
+			buf, err = json.Marshal(s)
+			if err != nil {
+				return err
+			}
+			_, err = b.Write(buf)
+			if err != nil {
+				return err
+			}
+		}
+	*/
 	err = b.WriteByte(',')
 	if err != nil {
 		return err
@@ -64,21 +71,27 @@ func (s CapEntry) WriteJSON(w io.Writer) error {
 			if err != nil {
 				return err
 			}
-			for i, s := range s.ToArray() {
+			for i, j := range s.ToArray() {
 				if i != 0 {
 					_, err = b.WriteString(",")
 				}
 				if err != nil {
 					return err
 				}
-				buf, err = json.Marshal(s)
+				_, err = b.Write(strconv.AppendQuote([]byte{}, j))
 				if err != nil {
 					return err
 				}
-				_, err = b.Write(buf)
-				if err != nil {
-					return err
-				}
+				/*
+					buf, err = json.Marshal(s)
+					if err != nil {
+						return err
+					}
+					_, err = b.Write(buf)
+					if err != nil {
+						return err
+					}
+				*/
 			}
 			err = b.WriteByte(']')
 		}
@@ -97,6 +110,11 @@ func (s CapEntry) WriteJSON(w io.Writer) error {
 	{
 		s := s.Points()
 		{
+			//nested array - requires two square braces
+			err = b.WriteByte('[')
+			if err != nil {
+				return err
+			}
 			err = b.WriteByte('[')
 			if err != nil {
 				return err
@@ -109,16 +127,22 @@ func (s CapEntry) WriteJSON(w io.Writer) error {
 					return err
 				}
 				//This method is modified to be influxdb-compatible
-				err = s.WriteJSON(b)
+				err = s.WriteNoBufferJSON(b)
 				if err != nil {
 					return err
 				}
 			}
+			//end both square braces
 			err = b.WriteByte(']')
+			if err != nil {
+				return err
+			}
+			err = b.WriteByte(']')
+			if err != nil {
+				return err
+			}
 		}
-		if err != nil {
-			return err
-		}
+
 	}
 	err = b.WriteByte('}')
 	if err != nil {
@@ -127,6 +151,7 @@ func (s CapEntry) WriteJSON(w io.Writer) error {
 	err = b.Flush()
 	return err
 }
+
 func (s CapEntry) MarshalJSON() ([]byte, error) {
 	b := bytes.Buffer{}
 	err := s.WriteJSON(&b)

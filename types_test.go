@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	capn "github.com/glycerine/go-capnproto"
+	"io/ioutil"
 	"testing"
 )
 
@@ -18,6 +19,76 @@ func MakeLogMsg() *capn.Segment {
 	seg := capn.NewBuffer(buf)
 	LogMsgtoSegment(seg, testName, testLevel, testMessage)
 	return seg
+}
+
+func BenchmarkLogMsg(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		buf := make([]byte, 0, 100)
+		seg := capn.NewBuffer(buf)
+		b.StartTimer()
+		LogMsgtoSegment(seg, testName, testLevel, testMessage)
+	}
+}
+
+func BenchmarkElasticsearchDecodePacked(b *testing.B) {
+	b.ReportAllocs()
+	var err error
+	buf := bytes.NewBuffer(nil)
+	inseg := MakeLogMsg()
+	n, err := inseg.WriteToPacked(buf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(n)
+	out := ioutil.Discard
+	var seg *capn.Segment
+	var streambuf *bytes.Buffer
+
+	for i := 0; i < b.N; i++ {
+		streambuf = getBuffer()
+		seg, err = capn.ReadFromPackedStream(buf, streambuf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		ReadRootCapEntry(seg).WriteESJSON(out)
+		//re-write to buffer
+		b.StopTimer()
+		putBuffer(streambuf)
+		buf.Reset()
+		inseg.WriteToPacked(buf)
+		b.StartTimer()
+	}
+}
+
+func BenchmarkInfluxDBDecodePacked(b *testing.B) {
+	b.ReportAllocs()
+	var err error
+	buf := bytes.NewBuffer(nil)
+	inseg := MakeLogMsg()
+	n, err := inseg.WriteToPacked(buf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(n)
+	out := ioutil.Discard
+	var seg *capn.Segment
+	var streambuf *bytes.Buffer
+
+	for i := 0; i < b.N; i++ {
+		streambuf = getBuffer()
+		seg, err = capn.ReadFromPackedStream(buf, streambuf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		ReadRootCapEntry(seg).WriteJSON(out)
+		//re-write to buffer
+		b.StopTimer()
+		putBuffer(streambuf)
+		buf.Reset()
+		inseg.WriteToPacked(buf)
+		b.StartTimer()
+	}
 }
 
 func TestMakeCapLog(t *testing.T) {
@@ -124,6 +195,16 @@ func TestCapLogMarshal(t *testing.T) {
 	if !ok {
 		t.Fatal("'points' could not be cast to []interface{}")
 	}
+	//check lengths
+	if len(ptslice) != 1 {
+		t.Fatal("Length of [][]interface{} is not 1")
+	}
+	ptslice, ok = ptslice[0].([]interface{})
+	//check length again
+	if len(ptslice) != 3 {
+		t.Fatal("Length of []interface{} is not 3")
+	}
+
 	if time, err := ptslice[0].(json.Number).Int64(); err == nil {
 		t.Logf("Got timestamp %d", time)
 	} else {

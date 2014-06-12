@@ -1,85 +1,173 @@
 package fluxlog
 
 import (
+	"bytes"
 	"github.com/bitly/go-nsq"
 	capn "github.com/glycerine/go-capnproto"
+	"github.com/philhofer/gringo"
 	"log"
+	"sync"
 	"time"
+)
+
+type msgbuffer struct {
+	in     *sync.Mutex
+	inbuf  *bytes.Buffer
+	outbuf *bytes.Buffer
+}
+
+const (
+	//MAXBUFFERLENGTH determines max sustained memory usage per logger.
+	//Each logger uses two message buffers.
+	//Each buffer is allowed to grow unbounded, but the buffer is deleted and re-allocated
+	//to a smaller one if it is greater than MAXBUFFERLENGTH.
+	MAXBUFFERLENGTH = 2000
 )
 
 var (
 	defaultConfig *nsq.Config
+	ticker        <-chan time.Time
+	//BatchTime determines how frequently data is pushed to NSQ. Default is 1 second.
+	BatchTime  time.Duration
+	bufferPool *sync.Pool
+	bytesPool  *sync.Pool
 )
 
 func init() {
+	BatchTime = 3 * time.Second
+	ticker = time.Tick(BatchTime)
 	defaultConfig = nsq.NewConfig()
 	defaultConfig.Set("verbose", false)
 	defaultConfig.Set("snappy", true)
-	defaultConfig.Set("max_in_flight", 20)
+	defaultConfig.Set("max_in_flight", 100)
+	bufferPool = new(sync.Pool)
+	bufferPool.New = func() interface{} { return bytes.NewBuffer(nil) }
+	bytesPool = new(sync.Pool)
+	bytesPool.New = func() interface{} { return make([]byte, 0, 100) }
 }
 
-type Client struct {
-	w *nsq.Producer
+/*	////////////////
+	POOL OPERATIONS
+	///////////////			*/
+func getBuffer() *bytes.Buffer {
+	buf, ok := bufferPool.Get().(*bytes.Buffer)
+	if !ok {
+		panic("Bufferpool did something weird.")
+	}
+	buf.Truncate(0)
+	return buf
 }
 
-func NewClient(nsqdAddr string, secret string) (*Client, error) {
+func putBuffer(buf *bytes.Buffer) {
+	bufferPool.Put(buf)
+}
+
+func getBytes() []byte {
+	bytes, ok := bytesPool.Get().([]byte)
+	if !ok {
+		panic("bytespool did something weird")
+	}
+	bytes = bytes[0:]
+	return bytes
+}
+
+func putBytes(b []byte) {
+	bytesPool.Put(b)
+}
+
+/*  //////////////
+		LOGGER
+//////////////			*/
+
+//Logger is the base type for sending messages to NSQ. It is a wrapper for an nsq 'Producer'
+type Logger struct {
+	w      *nsq.Producer
+	list   *gringo.Gringo
+	Topic  string
+	DbName string
+	done   chan *nsq.ProducerTransaction
+}
+
+/* NewLogger returns a logger that writes data on the NSQ topic 'Topic'
+and includes the field 'name' as 'DbName'. 'nsqdAddr' should be a fully-qualified
+address of an nsqd instance (usually running on the same machine), and 'secret'
+is the shared secret with that nsqd instance. */
+func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Logger, error) {
 	err := defaultConfig.Set("auth_secret", secret)
 	if err != nil {
 		return nil, err
 	}
 
 	prod := nsq.NewProducer(nsqdAddr, defaultConfig)
-	return &Client{w: prod}, nil
-}
-
-type Logger struct {
-	c      *Client
-	Topic  string
-	DbName string
-}
-
-func NewLogger(c *Client, topic string, dbname string) *Logger {
-	return &Logger{
-		c:      c,
-		Topic:  topic,
-		DbName: dbname,
+	l := &Logger{
+		w:      prod,
+		list:   gringo.NewGringo(),
+		Topic:  Topic,
+		DbName: DbName,
+		done:   make(chan *nsq.ProducerTransaction, 16),
 	}
+
+	//start ticker monitor loop
+	go func(l *Logger) {
+		var seg *capn.Segment
+		var buf *bytes.Buffer
+		for {
+			//return if list == nil
+			if l.list == nil {
+				break
+			}
+
+			seg = l.list.Read()
+			//check for nonsense
+			if seg == nil {
+				continue
+			}
+
+			buf = getBuffer()
+			seg.WriteTo(buf)
+
+			w.PublishAsync(l.Topic, buf.Bytes(), done, nil)
+			putBuffer(buf)
+		}
+		return
+	}(l)
+
+	go func(l *Logger) {
+		var pd *nsq.ProducerTransaction
+		for pd = range l.done {
+			if pd.Error != nil {
+				log.Print("Encountered error %q publishing to nsq with args %#v", pd.Error, pd.Args)
+			}
+		}
+	}(l)
+
+	return l, nil
 }
 
-func (l *Logger) doEntry(e map[string]interface{}) {
+func (l *Logger) doEntry(e map[string]interface{}) (err error) {
 	e["time"] = time.Now().Unix()
 	//Get a buffer; create a capnproto segment
 	buf := getBytes()
 	seg := capn.NewBuffer(buf)
-	err := EntrytoSegment(seg, l.DbName, e)
+	err = EntrytoSegment(seg, l.DbName, e)
 	if err != nil {
-		log.Print(err)
 		return
 	}
-
-	outbuf := getBuffer()
-	_, err = seg.WriteToPacked(outbuf)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	l.c.w.PublishAsync(l.Topic, outbuf.Bytes(), nil, nil)
+	l.list.Write(seg)
 	putBytes(buf)
-	putBuffer(outbuf)
+	return
 }
 
 func (l *Logger) doMsg(level LogLevel, message string) {
 	buf := getBytes()
 	seg := capn.NewBuffer(buf)
 	LogMsgtoSegment(seg, l.DbName, level, message)
-
-	outbuf := getBuffer()
-	_, err := seg.WriteToPacked(outbuf)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	l.c.w.PublishAsync(l.Topic, outbuf.Bytes(), nil, nil)
+	l.list.Write(seg)
 	putBytes(buf)
-	putBuffer(outbuf)
+}
+
+func (l *Logger) Close() {
+	l.list = nil
+	close(l.done)
+	l.w.Stop()
 }

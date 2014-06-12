@@ -24,27 +24,29 @@ func EntrytoSegment(s *capn.Segment, name string, entry map[string]interface{}) 
 func LogMsgtoSegment(s *capn.Segment, name string, level LogLevel, message string) {
 	ce := NewRootCapEntry(s)
 	tlist := s.NewTextList(3)
-	plist := NewPointsTList(s, 3)
-	//set timestamp
-	tlist.Set(0, "time")
-	tstamppt := NewPointsT(s)
-	tstamppt.SetInt(time.Now().Unix())
-	capn.PointerList(plist).Set(0, capn.Object(tstamppt))
-	//set level
-	tlist.Set(1, "level")
-	tlevel := NewPointsT(s)
-	tlevel.SetInt(int64(level))
-	capn.PointerList(plist).Set(1, capn.Object(tlevel))
-	//set message
-	tlist.Set(2, "message")
-	tmsg := NewPointsT(s)
-	tmsg.SetText(message)
-	capn.PointerList(plist).Set(2, capn.Object(tmsg))
+	plist := NewPointsTList(s, 3).ToArray()
+	/*
+		//set timestamp
+		tlist.Set(0, "time")
+		tstamppt := NewPointsT(s)
+		tstamppt.SetInt(time.Now().Unix())
+		capn.PointerList(plist).Set(0, capn.Object(tstamppt))
+		//set level
+		tlist.Set(1, "level")
+		tlevel := NewPointsT(s)
+		tlevel.SetInt(int64(level))
+		capn.PointerList(plist).Set(1, capn.Object(tlevel))
+		//set message
+		tlist.Set(2, "message")
+		tmsg := NewPointsT(s)
+		tmsg.SetText(message)
+		capn.PointerList(plist).Set(2, capn.Object(tmsg))
 
-	//set name, columns, points
-	ce.SetName(name)
-	ce.SetColumns(tlist)
-	ce.SetPoints(plist)
+		//set name, columns, points
+		ce.SetName(name)
+		ce.SetColumns(tlist)
+		ce.SetPoints(plist)
+	*/
 }
 
 func setTo(s *capn.Segment, ce CapEntry, name string, vals map[string]interface{}) error {

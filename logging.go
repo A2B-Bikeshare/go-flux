@@ -1,11 +1,8 @@
 package fluxlog
 
-import (
-	"bytes"
-	"sync"
-)
+import "fmt"
 
-//Represents one of 'debug/info/warn/error/fatal'
+//LogLevel represents one of 'debug/info/warn/error/fatal'
 type LogLevel int64
 
 const (
@@ -16,65 +13,30 @@ const (
 	FATAL LogLevel = iota //Fatal log level
 )
 
-var (
-	bufferPool   *sync.Pool
-	bytesPool    *sync.Pool
-	LogDbName    = "fluxlog_client"
-	LogTopicName = "logs"
-)
-
-func init() {
-	bufferPool = new(sync.Pool)
-	bufferPool.New = func() interface{} { return bytes.NewBuffer(nil) }
-	bytesPool = new(sync.Pool)
-	bytesPool.New = func() interface{} { return make([]byte, 0, 100) }
-}
-
-func getBuffer() *bytes.Buffer {
-	buf, ok := bufferPool.Get().(*bytes.Buffer)
-	if !ok {
-		panic("Bufferpool did something weird.")
-	}
-	buf.Truncate(0)
-	return buf
-}
-
-func putBuffer(buf *bytes.Buffer) {
-	bufferPool.Put(buf)
-}
-
-func getBytes() []byte {
-	bytes, ok := bytesPool.Get().([]byte)
-	if !ok {
-		panic("bytespool did something weird")
-	}
-	bytes = bytes[0:]
-	return bytes
-}
-
-func putBytes(b []byte) {
-	bytesPool.Put(b)
-}
-
 type Entry map[string]interface{}
 
 //Log at the 'info' level
-func (l *Logger) Info(v string) { l.doMsg(INFO, v) }
+func (l *Logger) Info(v string)                            { l.doMsg(INFO, v) }
+func (l *Logger) Infof(format string, args ...interface{}) { l.doMsg(INFO, fmt.Sprintf(format, args)) }
 
 //Log at the 'debug' level
-func (l *Logger) Debug(v string) { l.doMsg(DEBUG, v) }
+func (l *Logger) Debug(v string)                            { l.doMsg(DEBUG, v) }
+func (l *Logger) Debugf(format string, args ...interface{}) { l.doMsg(DEBUG, fmt.Sprintf(format, args)) }
 
 //Log at the 'warn' level
-func (l *Logger) Warn(v string) { l.doMsg(WARN, v) }
+func (l *Logger) Warn(v string)                            { l.doMsg(WARN, v) }
+func (l *Logger) Warnf(format string, args ...interface{}) { l.doMsg(WARN, fmt.Sprintf(format, args)) }
 
 //Log at the 'error' level
-func (l *Logger) Error(v string) { l.doMsg(ERROR, v) }
+func (l *Logger) Error(v string)                            { l.doMsg(ERROR, v) }
+func (l *Logger) Errorf(format string, args ...interface{}) { l.doMsg(ERROR, fmt.Sprintf(format, args)) }
 
 //Log at the 'fatal' level
-func (l *Logger) Fatal(v string) { l.doMsg(FATAL, v) }
+func (l *Logger) Fatal(v string)                            { l.doMsg(FATAL, v) }
+func (l *Logger) Fatalf(format string, args ...interface{}) { l.doMsg(FATAL, fmt.Sprintf(format, args)) }
 
 //Log at an arbitrary level
 func (l *Logger) Log(level LogLevel, v string) { l.doMsg(level, v) }
 
 //Log with arbitrary information
-func (l *Logger) LogEntry(e Entry) { l.doEntry(e) }
+func (l *Logger) LogEntry(e Entry) error { return l.doEntry(e) }
