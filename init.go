@@ -6,15 +6,10 @@ import (
 	capn "github.com/glycerine/go-capnproto"
 	"github.com/philhofer/gringo"
 	"log"
+	"os"
 	"sync"
 	"time"
 )
-
-type msgbuffer struct {
-	in     *sync.Mutex
-	inbuf  *bytes.Buffer
-	outbuf *bytes.Buffer
-}
 
 const (
 	//MAXBUFFERLENGTH determines max sustained memory usage per logger.
@@ -26,22 +21,19 @@ const (
 
 var (
 	defaultConfig *nsq.Config
-	ticker        <-chan time.Time
-	//BatchTime determines how frequently data is pushed to NSQ. Default is 1 second.
-	BatchTime  time.Duration
-	bufferPool *sync.Pool
-	bytesPool  *sync.Pool
+	bufferPool    *sync.Pool
+	bytesPool     *sync.Pool
 )
 
+type sig struct{}
+
 func init() {
-	BatchTime = 3 * time.Second
-	ticker = time.Tick(BatchTime)
 	defaultConfig = nsq.NewConfig()
 	defaultConfig.Set("verbose", false)
 	defaultConfig.Set("snappy", true)
 	defaultConfig.Set("max_in_flight", 100)
 	bufferPool = new(sync.Pool)
-	bufferPool.New = func() interface{} { return bytes.NewBuffer(nil) }
+	bufferPool.New = func() interface{} { return bytes.NewBuffer(getBytes()) }
 	bytesPool = new(sync.Pool)
 	bytesPool.New = func() interface{} { return make([]byte, 0, 100) }
 }
@@ -86,6 +78,7 @@ type Logger struct {
 	Topic  string
 	DbName string
 	done   chan *nsq.ProducerTransaction
+	fexit  chan sig
 }
 
 /* NewLogger returns a logger that writes data on the NSQ topic 'Topic'
@@ -93,41 +86,72 @@ and includes the field 'name' as 'DbName'. 'nsqdAddr' should be a fully-qualifie
 address of an nsqd instance (usually running on the same machine), and 'secret'
 is the shared secret with that nsqd instance. */
 func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Logger, error) {
-	err := defaultConfig.Set("auth_secret", secret)
-	if err != nil {
-		return nil, err
+	if secret != "" {
+		err := defaultConfig.Set("auth_secret", secret)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	prod := nsq.NewProducer(nsqdAddr, defaultConfig)
+	prod.SetLogger(log.New(os.Stdout, "", 0), nsq.LogLevelDebug)
 	l := &Logger{
 		w:      prod,
 		list:   gringo.NewGringo(),
 		Topic:  Topic,
 		DbName: DbName,
 		done:   make(chan *nsq.ProducerTransaction, 16),
+		fexit:  make(chan sig),
 	}
 
 	//start ticker monitor loop
 	go func(l *Logger) {
+		dcount := 0
+		maxDcount := 10
 		var seg *capn.Segment
 		var buf *bytes.Buffer
+		var err error
 		for {
-			//return if list == nil
-			if l.list == nil {
+			select {
+			//break on receive on fexit
+			case <-l.fexit:
 				break
+				//read from list; publishasync
+			default:
+				seg = l.list.Read()
+				//check for nonsense
+				if seg == nil {
+					continue
+				}
+
+				buf = getBuffer()
+				seg.WriteTo(buf)
+				if buf.Len() == 0 {
+					continue
+				}
+			pub:
+				err = l.w.PublishAsync(l.Topic, buf.Bytes(), l.done, nil)
+				if err != nil {
+					switch err {
+					//if not connected, wait for reconnection
+					//break if lotsa failures
+					case nsq.ErrNotConnected:
+						if dcount > maxDcount {
+							break
+						}
+						dcount++
+						time.Sleep(100 * time.Millisecond)
+						goto pub
+					case nsq.ErrStopped:
+						break
+					default:
+						log.Print(err)
+					}
+				} else {
+					//reset disconnect count
+					dcount = 0
+				}
+				putBuffer(buf)
 			}
-
-			seg = l.list.Read()
-			//check for nonsense
-			if seg == nil {
-				continue
-			}
-
-			buf = getBuffer()
-			seg.WriteTo(buf)
-
-			w.PublishAsync(l.Topic, buf.Bytes(), done, nil)
-			putBuffer(buf)
 		}
 		return
 	}(l)
@@ -136,7 +160,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 		var pd *nsq.ProducerTransaction
 		for pd = range l.done {
 			if pd.Error != nil {
-				log.Print("Encountered error %q publishing to nsq with args %#v", pd.Error, pd.Args)
+				log.Printf("Encountered error %q publishing to nsq with args %#v", pd.Error, pd.Args)
 			}
 		}
 	}(l)
@@ -167,7 +191,10 @@ func (l *Logger) doMsg(level LogLevel, message string) {
 }
 
 func (l *Logger) Close() {
-	l.list = nil
+	//reader/publisher MUST close first
+	l.fexit <- sig{}
+	//THEN close error channel
 	close(l.done)
+	//THEN close connection
 	l.w.Stop()
 }

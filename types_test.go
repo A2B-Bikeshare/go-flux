@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	capn "github.com/glycerine/go-capnproto"
+	"github.com/philhofer/gringo"
 	"io/ioutil"
+	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -19,6 +22,39 @@ func MakeLogMsg() *capn.Segment {
 	seg := capn.NewBuffer(buf)
 	LogMsgtoSegment(seg, testName, testLevel, testMessage)
 	return seg
+}
+
+// Test that Gringo can handle aggressive concurrent
+// reads and writes without failure
+func TestFloodGringo(t *testing.T) {
+	NUMMSG := 10000
+	msgs := make([]*capn.Segment, NUMMSG)
+	for i := 0; i < NUMMSG; i++ {
+		msgs[i] = MakeLogMsg()
+	}
+	outmsgs := make([]*capn.Segment, NUMMSG)
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	g := gringo.NewGringo()
+	//start writer
+	go func() {
+		for _, msg := range msgs {
+			g.Write(msg)
+		}
+		wg.Done()
+	}()
+	//start reader
+	go func() {
+		for i := 0; i < NUMMSG; i++ {
+			outmsgs[i] = g.Read()
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+	//test for equality
+	if !reflect.DeepEqual(msgs, outmsgs) {
+		t.Fatal("output arrays are not equal.")
+	}
 }
 
 func BenchmarkLogMsg(b *testing.B) {

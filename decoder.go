@@ -41,7 +41,7 @@ func UseDecoder(d Decoder, data []byte, b *bytes.Buffer) (err error) {
 
 	var seg *capn.Segment
 	var n int64
-	for seg, n, err = capn.ReadFromMemoryZeroCopy(data); err != io.EOF; data = data[n:] {
+	for seg, n, err = capn.ReadFromMemoryZeroCopy(data); err != io.EOF; {
 		if err != nil {
 			return
 		}
@@ -57,6 +57,11 @@ func UseDecoder(d Decoder, data []byte, b *bytes.Buffer) (err error) {
 		_, err = b.Write(d.Suffix())
 		if err != nil {
 			return
+		}
+		if len(data) > int(n) {
+			data = data[n:]
+		} else {
+			break
 		}
 	}
 	return
