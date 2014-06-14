@@ -17,3 +17,10 @@ Fluxlog is designed to robust, fault-tolerant, and FAST. However, there are
 restrictions on the form of your data.
 
 Currently, I'm working on clients for Elasticsearch and InfluxDB. MongoDB is next on the list.
+
+Performance
+-------------
+Currently, on my laptop (2014 MacBook), Fluxlog can do the following 110,000 times per second (synchronously):
+  1. Write a log message into the fluxlog protocol
+  2. De-serialize the log message from the protocol
+  3. Write the log message into JSON (either InfluxDB- or Elasticsearch-compatible form)

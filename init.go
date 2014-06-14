@@ -35,7 +35,7 @@ func init() {
 	bufferPool = new(sync.Pool)
 	bufferPool.New = func() interface{} { return bytes.NewBuffer(getBytes()) }
 	bytesPool = new(sync.Pool)
-	bytesPool.New = func() interface{} { return make([]byte, 0, 100) }
+	bytesPool.New = func() interface{} { return make([]byte, 0, 300) }
 }
 
 /*	////////////////
@@ -100,62 +100,65 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 		Topic:  Topic,
 		DbName: DbName,
 		done:   make(chan *nsq.ProducerTransaction, 16),
-		fexit:  make(chan sig),
+		fexit:  make(chan sig, 1),
 	}
 
-	//start ticker monitor loop
+	//Publish writes to the logger
 	go func(l *Logger) {
-		dcount := 0
-		maxDcount := 10
 		var seg *capn.Segment
 		var buf *bytes.Buffer
 		var err error
 		for {
+			//send message FIRST, but check for sanity
+			if buf == nil || buf.Len() == 0 {
+				goto test
+			}
+
+		pub:
+			//publish segment; check for connection
+			err = l.w.PublishAsync(l.Topic, buf.Bytes(), l.done, nil)
+			if err != nil {
+				switch err {
+				//if not connected, wait for reconnection, loop back
+				case nsq.ErrNotConnected:
+					time.Sleep(50 * time.Millisecond)
+					goto pub
+
+				//break if the producer was stopped
+				case nsq.ErrStopped:
+					close(l.done)
+					break
+				default:
+					log.Print(err)
+				}
+			}
+			//recycle buffer
+			putBuffer(buf)
+
+		test:
+			//check for exit; get segment
 			select {
+
 			//break on receive on fexit
 			case <-l.fexit:
 				break
-				//read from list; publishasync
+
+			//read from list; publishasync
 			default:
 				seg = l.list.Read()
 				//check for nonsense
 				if seg == nil {
-					continue
+					goto test
 				}
 
 				buf = getBuffer()
 				seg.WriteTo(buf)
-				if buf.Len() == 0 {
-					continue
-				}
-			pub:
-				err = l.w.PublishAsync(l.Topic, buf.Bytes(), l.done, nil)
-				if err != nil {
-					switch err {
-					//if not connected, wait for reconnection
-					//break if lotsa failures
-					case nsq.ErrNotConnected:
-						if dcount > maxDcount {
-							break
-						}
-						dcount++
-						time.Sleep(100 * time.Millisecond)
-						goto pub
-					case nsq.ErrStopped:
-						break
-					default:
-						log.Print(err)
-					}
-				} else {
-					//reset disconnect count
-					dcount = 0
-				}
-				putBuffer(buf)
 			}
 		}
 		return
 	}(l)
 
+	//Log errors from failed pubs
 	go func(l *Logger) {
 		var pd *nsq.ProducerTransaction
 		for pd = range l.done {
@@ -191,10 +194,12 @@ func (l *Logger) doMsg(level LogLevel, message string) {
 }
 
 func (l *Logger) Close() {
-	//reader/publisher MUST close first
+	//send exit signal to writer
 	l.fexit <- sig{}
-	//THEN close error channel
-	close(l.done)
-	//THEN close connection
+	//force check for exit by sending nil
+	l.list.Write(nil)
+	//stop the producer
 	l.w.Stop()
+	//stop the error channel
+	close(l.done)
 }

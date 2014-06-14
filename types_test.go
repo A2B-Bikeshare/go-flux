@@ -6,6 +6,7 @@ import (
 	capn "github.com/glycerine/go-capnproto"
 	"github.com/philhofer/gringo"
 	"io/ioutil"
+	"math/rand"
 	"reflect"
 	"sync"
 	"testing"
@@ -17,9 +18,27 @@ const (
 	testMessage = "testMessage here!"
 )
 
+func TestBufferPool(t *testing.T) {
+	bufs := make([]*bytes.Buffer, 0, 10)
+	for i := 0; i < 1000; i++ {
+		//get [0,10) buffers
+		nOut := rand.Intn(10)
+		for j := 0; j < nOut; j++ {
+			bufs = append(bufs, getBuffer())
+		}
+
+		//put [0,10) buffers
+		for k := 0; k < nOut; k++ {
+			tbuf := bufs[nOut-k-1]
+			putBuffer(tbuf)
+		}
+		//reset
+		bufs = bufs[0:]
+	}
+}
+
 func MakeLogMsg() *capn.Segment {
-	buf := make([]byte, 0, 100)
-	seg := capn.NewBuffer(buf)
+	seg := capn.NewBuffer(getBytes())
 	LogMsgtoSegment(seg, testName, testLevel, testMessage)
 	return seg
 }
@@ -57,74 +76,83 @@ func TestFloodGringo(t *testing.T) {
 	}
 }
 
-func BenchmarkLogMsg(b *testing.B) {
+//Encoding Speed
+func BenchmarkLogtoSeg(b *testing.B) {
+	b.SetBytes(280)
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		buf := make([]byte, 0, 100)
-		seg := capn.NewBuffer(buf)
+		bt := getBytes()
+		seg := capn.NewBuffer(bt)
 		b.StartTimer()
 		LogMsgtoSegment(seg, testName, testLevel, testMessage)
+		b.StopTimer()
+		seg = nil
+		b.StartTimer()
+		putBytes(bt)
 	}
 }
 
-func BenchmarkElasticsearchDecodePacked(b *testing.B) {
+//Encoding+Decoding Speed for Elasticsearch output
+func BenchmarkElasticsearchEndtoEnd(b *testing.B) {
 	b.ReportAllocs()
 	var err error
-	buf := bytes.NewBuffer(nil)
+	buf := getBuffer()
 	inseg := MakeLogMsg()
-	n, err := inseg.WriteToPacked(buf)
+	n, err := inseg.WriteTo(buf)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(n)
 	out := ioutil.Discard
 	var seg *capn.Segment
-	var streambuf *bytes.Buffer
 
 	for i := 0; i < b.N; i++ {
-		streambuf = getBuffer()
-		seg, err = capn.ReadFromPackedStream(buf, streambuf)
+		seg, _, err = capn.ReadFromMemoryZeroCopy(buf.Bytes())
 		if err != nil {
 			b.Fatal(err)
 		}
 		ReadRootCapEntry(seg).WriteESJSON(out)
+
 		//re-write to buffer
-		b.StopTimer()
-		putBuffer(streambuf)
 		buf.Reset()
-		inseg.WriteToPacked(buf)
-		b.StartTimer()
+		_, err = MakeLogMsg().WriteTo(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
+	putBuffer(buf)
 }
 
-func BenchmarkInfluxDBDecodePacked(b *testing.B) {
+//Encoding+Decoding speed for InfluxDB output
+func BenchmarkInfluxDBEndtoEnd(b *testing.B) {
 	b.ReportAllocs()
 	var err error
-	buf := bytes.NewBuffer(nil)
+	buf := getBuffer()
 	inseg := MakeLogMsg()
-	n, err := inseg.WriteToPacked(buf)
+	n, err := inseg.WriteTo(buf)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(n)
 	out := ioutil.Discard
 	var seg *capn.Segment
-	var streambuf *bytes.Buffer
 
 	for i := 0; i < b.N; i++ {
-		streambuf = getBuffer()
-		seg, err = capn.ReadFromPackedStream(buf, streambuf)
+		seg, _, err = capn.ReadFromMemoryZeroCopy(buf.Bytes())
 		if err != nil {
 			b.Fatal(err)
 		}
 		ReadRootCapEntry(seg).WriteJSON(out)
+
 		//re-write to buffer
-		b.StopTimer()
-		putBuffer(streambuf)
 		buf.Reset()
-		inseg.WriteToPacked(buf)
-		b.StartTimer()
+		_, err = MakeLogMsg().WriteTo(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
+	putBuffer(buf)
 }
 
 func TestMakeCapLog(t *testing.T) {
@@ -175,7 +203,7 @@ func TestMakeCapLog(t *testing.T) {
 
 func TestCapLogMarshal(t *testing.T) {
 	seg := MakeLogMsg()
-	buf := bytes.NewBuffer(nil)
+	buf := getBuffer()
 	entry := ReadRootCapEntry(seg)
 	smp := make(map[string]interface{})
 	dec := json.NewDecoder(buf)
@@ -260,12 +288,13 @@ func TestCapLogMarshal(t *testing.T) {
 	} else {
 		t.Fatal("Third 'points' element could not be cast to string")
 	}
+	putBuffer(buf)
 	return
 }
 
 func TestCapLogMarshalElasticSearch(t *testing.T) {
 	seg := MakeLogMsg()
-	buf := bytes.NewBuffer(nil)
+	buf := getBuffer()
 	entry := ReadRootCapEntry(seg)
 	smp := make(map[string]interface{})
 	dec := json.NewDecoder(buf)
@@ -317,5 +346,6 @@ func TestCapLogMarshalElasticSearch(t *testing.T) {
 			t.Fatalf("Unkown element %q in unmarshalled map", key)
 		}
 	}
+	putBuffer(buf)
 	return
 }
