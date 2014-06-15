@@ -79,6 +79,9 @@ type Logger struct {
 	DbName string
 	done   chan *nsq.ProducerTransaction
 	fexit  chan sig
+	wg     *sync.WaitGroup //used for waiting for conumer and error goroutines to finish
+	cguard *sync.Mutex     //used for accessing logger state; immutable otherwise
+	closed bool            //closed; only changed by l.Close(); must be accessed by Mutex
 }
 
 /* NewLogger returns a logger that writes data on the NSQ topic 'Topic'
@@ -99,15 +102,21 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 		list:   gringo.NewGringo(),
 		Topic:  Topic,
 		DbName: DbName,
-		done:   make(chan *nsq.ProducerTransaction, 16),
-		fexit:  make(chan sig, 1),
+		done:   make(chan *nsq.ProducerTransaction),
+		fexit:  make(chan sig, 2),
+		wg:     new(sync.WaitGroup),
+		cguard: new(sync.Mutex),
+		closed: false,
 	}
-
+	l.wg.Add(2)
 	//Publish writes to the logger
 	go func(l *Logger) {
 		var seg *capn.Segment
 		var buf *bytes.Buffer
 		var err error
+
+		//N.B. there can only be 'break's in this loop; no returns
+		//otherwise l.Close() will deadlock
 		for {
 			//send message FIRST, but check for sanity
 			if buf == nil || buf.Len() == 0 {
@@ -124,37 +133,54 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 					time.Sleep(50 * time.Millisecond)
 					goto pub
 
-				//break if the producer was stopped
+				//break if the producer was stopped (somehow)
 				case nsq.ErrStopped:
-					close(l.done)
-					break
+					//goto test; receive on <-l.fexit
+					l.fexit <- sig{}
+					goto test
 				default:
 					log.Print(err)
 				}
 			}
-			//recycle buffer
-			putBuffer(buf)
 
 		test:
 			//check for exit; get segment
 			select {
 
-			//break on receive on fexit
+			//break on receive on l.fexit
 			case <-l.fexit:
-				break
+				//stop the producer (flush error channel)
+				l.w.Stop()
+				close(l.done)
+				time.Sleep(10 * time.Millisecond)
+				goto exit
 
 			//read from list; publishasync
 			default:
 				seg = l.list.Read()
-				//check for nonsense
+
+				//test for nil signal
+				// -- should be sent after
+				// -- a send on l.fexit
 				if seg == nil {
 					goto test
 				}
 
-				buf = getBuffer()
+				//test for buffer initialization
+				//should only be true on the 1st loop
+				if buf == nil {
+					buf = getBuffer()
+				}
+
+				//reset and write
+				buf.Reset()
 				seg.WriteTo(buf)
 			}
 		}
+	exit:
+		//Cleanup after break
+		log.Println("Publish loop exited.")
+		l.wg.Done()
 		return
 	}(l)
 
@@ -166,6 +192,8 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 				log.Printf("Encountered error %q publishing to nsq with args %#v", pd.Error, pd.Args)
 			}
 		}
+		log.Println("Error loop exited.")
+		l.wg.Done()
 	}(l)
 
 	return l, nil
@@ -193,13 +221,33 @@ func (l *Logger) doMsg(level LogLevel, message string) {
 	putBytes(buf)
 }
 
+//determine if logger is closed.
+//loggers cannot be restarted; you must call NewLogger()
+func (l *Logger) IsClosed() (b bool) {
+	l.cguard.Lock()
+	if l.closed {
+		b = true
+	} else {
+		b = false
+	}
+	l.cguard.Unlock()
+	return
+}
+
+//idempotently closes the logger
+//subsequent calls nop
+//blocks until all cleanup is complete
 func (l *Logger) Close() {
+	l.cguard.Lock()
+	if l.closed {
+		return
+	}
+	l.closed = true
+	l.cguard.Unlock()
 	//send exit signal to writer
 	l.fexit <- sig{}
 	//force check for exit by sending nil
 	l.list.Write(nil)
-	//stop the producer
-	l.w.Stop()
-	//stop the error channel
-	close(l.done)
+	//wait for cleanup
+	l.wg.Wait()
 }

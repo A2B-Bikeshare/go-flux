@@ -53,6 +53,7 @@ func logMsgs(l *Logger, mss []Msg) {
 }
 
 func TestConnection(t *testing.T) {
+	t.Log("Testing connection...")
 	conn := nsq.NewConn("localhost:4150", defaultConfig)
 	id, err := conn.Connect()
 	if err != nil {
@@ -60,6 +61,8 @@ func TestConnection(t *testing.T) {
 	}
 	t.Log(id)
 	conn.Close()
+	t.Log("Success.")
+	time.Sleep(100 * time.Millisecond)
 	return
 }
 
@@ -69,6 +72,7 @@ func TestLogMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(50 * time.Millisecond)
 	//consumer
 	/*
 		t.Log("Making consumer...")
@@ -97,7 +101,7 @@ func TestLogMessage(t *testing.T) {
 	//log 10 messages
 	msgs := getMsgs(10)
 	logMsgs(l, msgs)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 	/*
 	  counter := 0
 
@@ -119,7 +123,6 @@ func TestLogMessage(t *testing.T) {
 	  csm.Stop()
 	*/
 	l.Close()
-	time.Sleep(500 * time.Millisecond)
 	t.Log("Done.")
 	return
 }
