@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	capn "github.com/glycerine/go-capnproto"
 	"github.com/philhofer/gringo"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"reflect"
@@ -17,6 +18,18 @@ const (
 	testLevel   = WARN
 	testMessage = "testMessage here!"
 )
+
+type TestDecoder struct{}
+
+func (t TestDecoder) Decode(s CapEntry, w io.Writer) error {
+	return InfluxDBDecode(s, w)
+}
+func (t TestDecoder) Prefix() []byte {
+	return nil
+}
+func (t TestDecoder) Suffix() []byte {
+	return nil
+}
 
 func TestBufferPool(t *testing.T) {
 	bufs := make([]*bytes.Buffer, 0, 10)
@@ -198,6 +211,105 @@ func TestMakeCapLog(t *testing.T) {
 	if pointSlice[2].Text() != testMessage {
 		t.Fatalf("Expected message %q, got %q", testMessage, pointSlice[2].Text())
 	}
+	return
+}
+
+func TestUseDecoder(t *testing.T) {
+	seg := MakeLogMsg()
+	nbuf := getBuffer()
+	n, err := seg.WriteTo(nbuf)
+	if err != nil || n == 0 {
+		t.Fatal(err)
+	}
+	dat := nbuf.Bytes()
+	buf := getBuffer()
+	//write contents of nbuf.Bytes() ([]byte) to buf as JSON
+	err = UseDecoder(TestDecoder{}, dat, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	smp := make(map[string]interface{})
+	dec := json.NewDecoder(buf)
+	dec.UseNumber()
+	t.Log(buf.String())
+	err = dec.Decode(&smp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Unmarshaled element: #%v", smp)
+
+	//TEST NAME
+	name, ok := smp["name"]
+	if !ok {
+		t.Fatal("'name' not found in unmarshalled map")
+	}
+	if name != testName {
+		t.Fatalf("Expected %q for 'name', got %q", testName, name)
+	}
+
+	//TEST COLUMNS
+	cols, ok := smp["columns"]
+	if !ok {
+		t.Fatal("'columns' not found in unmarshalled map")
+	}
+	colslice, ok := cols.([]interface{})
+	if !ok {
+		t.Fatal("'columns' could not be cast to []interface{}")
+	}
+	if len(colslice) != 3 {
+		t.Fatal("'columns' not the right length")
+	}
+	if colslice[0].(string) != "time" {
+		t.Fatalf("Expected 'time', got %q", colslice[0])
+	}
+	if colslice[1].(string) != "level" {
+		t.Fatalf("Expected 'level', got %q", colslice[1])
+	}
+	if colslice[2].(string) != "message" {
+		t.Fatalf("Expected 'message', got %q", colslice[2])
+	}
+
+	//TEST POINTS
+	pts, ok := smp["points"]
+	if !ok {
+		t.Fatal("'points' not found in unmarshalled map")
+	}
+	ptslice, ok := pts.([]interface{})
+	if !ok {
+		t.Fatal("'points' could not be cast to []interface{}")
+	}
+	//check lengths
+	if len(ptslice) != 1 {
+		t.Fatal("Length of [][]interface{} is not 1")
+	}
+	ptslice, ok = ptslice[0].([]interface{})
+	//check length again
+	if len(ptslice) != 3 {
+		t.Fatal("Length of []interface{} is not 3")
+	}
+
+	if time, err := ptslice[0].(json.Number).Int64(); err == nil {
+		t.Logf("Got timestamp %d", time)
+	} else {
+		t.Fatal("First 'points' element could not be cast to int64")
+	}
+	if level, err := ptslice[1].(json.Number).Int64(); err == nil {
+		if level != int64(testLevel) {
+			t.Fatalf("Expected level %d, got level %d", testLevel, level)
+		}
+	} else {
+		t.Fatal("Second 'points' element could not be cast to int64")
+	}
+	if msg, ok := ptslice[2].(string); ok {
+		if msg != testMessage {
+			t.Fatalf("Expected message %q, got message %q", testMessage, msg)
+		}
+	} else {
+		t.Fatal("Third 'points' element could not be cast to string")
+	}
+	putBuffer(buf)
+	putBuffer(nbuf)
 	return
 }
 

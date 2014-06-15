@@ -45,30 +45,20 @@ func UseDecoder(d Decoder, data []byte, b *bytes.Buffer) (err error) {
 	}
 
 	var seg *capn.Segment
-	var n int64
-	for seg, n, err = capn.ReadFromMemoryZeroCopy(data); err != io.EOF; {
-		if err != nil {
-			return
-		}
-		entry := ReadRootCapEntry(seg)
-		_, err = b.Write(d.Prefix())
-		if err != nil {
-			return
-		}
-		err = d.Decode(entry, b)
-		if err != nil {
-			return
-		}
-		_, err = b.Write(d.Suffix())
-		if err != nil {
-			return
-		}
-		if len(data) > int(n) {
-			data = data[n:]
-		} else {
-			break
-		}
+	seg, _, err = capn.ReadFromMemoryZeroCopy(data)
+	if err != nil {
+		return
 	}
+	entry := ReadRootCapEntry(seg)
+	_, err = b.Write(d.Prefix())
+	if err != nil {
+		return
+	}
+	err = d.Decode(entry, b)
+	if err != nil {
+		return
+	}
+	_, err = b.Write(d.Suffix())
 	return
 }
 
