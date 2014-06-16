@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"github.com/bitly/go-nsq"
 	capn "github.com/glycerine/go-capnproto"
-	"github.com/philhofer/gringo"
+	//"github.com/philhofer/gringo"
 	"log"
 	"os"
 	"sync"
@@ -71,10 +71,25 @@ func putBytes(b []byte) {
 		LOGGER
 //////////////			*/
 
+type safelist struct {
+	c chan *capn.Segment
+}
+
+func (s *safelist) Write(c *capn.Segment) {
+	s.c <- c
+}
+
+func (s *safelist) Read() (c *capn.Segment) {
+	c = <-s.c
+	return
+}
+
+func newlist() *safelist { return &safelist{c: make(chan *capn.Segment, 32)} }
+
 //Logger is the base type for sending messages to NSQ. It is a wrapper for an nsq 'Producer'
 type Logger struct {
 	w      *nsq.Producer
-	list   *gringo.Gringo
+	list   *safelist
 	Topic  string
 	DbName string
 	done   chan *nsq.ProducerTransaction
@@ -99,7 +114,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 	prod.SetLogger(log.New(os.Stdout, "", 0), nsq.LogLevelDebug)
 	l := &Logger{
 		w:      prod,
-		list:   gringo.NewGringo(),
+		list:   newlist(),
 		Topic:  Topic,
 		DbName: DbName,
 		done:   make(chan *nsq.ProducerTransaction),
@@ -131,6 +146,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 				//if not connected, wait for reconnection, loop back
 				case nsq.ErrNotConnected:
 					time.Sleep(50 * time.Millisecond)
+					log.Println("NSQD disconnected; attempting reconnect...")
 					goto pub
 
 				//break if the producer was stopped (somehow)
@@ -162,6 +178,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 				//test for nil signal
 				// -- should be sent after
 				// -- a send on l.fexit
+				// otherwise, we get another seg.
 				if seg == nil {
 					goto test
 				}
@@ -199,6 +216,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 	return l, nil
 }
 
+//send a map[string]interface{} over the wire
 func (l *Logger) doEntry(e map[string]interface{}) (err error) {
 	e["time"] = time.Now().Unix()
 	//Get a buffer; create a capnproto segment
@@ -213,6 +231,7 @@ func (l *Logger) doEntry(e map[string]interface{}) (err error) {
 	return
 }
 
+//send a log message over the wire
 func (l *Logger) doMsg(level LogLevel, message string) {
 	buf := getBytes()
 	seg := capn.NewBuffer(buf)

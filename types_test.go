@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"reflect"
 	"sync"
 	"testing"
 )
@@ -83,10 +82,13 @@ func TestFloodGringo(t *testing.T) {
 		wg.Done()
 	}()
 	wg.Wait()
-	//test for equality
-	if !reflect.DeepEqual(msgs, outmsgs) {
-		t.Fatal("output arrays are not equal.")
+	//test for equality and correct ordering
+	for i, msg := range outmsgs {
+		if msg != msgs[i] {
+			t.Fatalf("Arrays unequal at index %d; %x != %x", i, msg, msgs[i])
+		}
 	}
+
 }
 
 //Encoding Speed

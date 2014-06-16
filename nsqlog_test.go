@@ -38,6 +38,7 @@ func getMsgs(n int) []Msg {
 
 func logMsgs(l *Logger, msgs []Msg) {
 	for _, msg := range msgs {
+		time.Sleep(100 * time.Nanosecond)
 		l.Log(msg.Level, msg.Message)
 	}
 }
@@ -57,13 +58,15 @@ func TestConnection(t *testing.T) {
 }
 
 func TestLogMessage(t *testing.T) {
+	rand.Seed(time.Now().Unix())
+	NMSG := 5   //number of messages sent
+	MAXMSG := 5 //max messages consumed
+
 	t.Log("Making logger...")
 	l, err := NewLogger("test", "test", "localhost:4150", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	//wait for setup
-	time.Sleep(50 * time.Millisecond)
 
 	// CONSUMER //
 	t.Log("Making consumer...")
@@ -72,7 +75,7 @@ func TestLogMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("Setting consumer HandlerFunc...")
-	bufs := make(chan *bytes.Buffer, 10)
+	bufs := make(chan *bytes.Buffer)
 	csm.SetHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
 		b := getBuffer()
 		dat := m.Body
@@ -91,32 +94,36 @@ func TestLogMessage(t *testing.T) {
 	// WRITE MESSAGES //
 	t.Log("Writing Messages...")
 	//log 10 messages
-	msgs := getMsgs(10)
+	msgs := getMsgs(NMSG)
 	for _, msg := range msgs {
 		t.Logf("Logging message %v...", msg)
 	}
 	logMsgs(l, msgs)
-	time.Sleep(1000 * time.Millisecond)
+	//ensure everything gets delivered
+	time.Sleep(500 * time.Millisecond)
 
-	//count messages
+	// COUNT MESSAGES //
 	counter := 0
 	t.Log("Counting received messages...")
-	for counter < 10 {
+	var buf *bytes.Buffer
+	for counter < MAXMSG {
 		select {
-		case buf := <-bufs:
+		case buf = <-bufs:
 			counter++
 			t.Logf("Received %q", buf.String())
-			putBuffer(buf)
-		case <-time.After(5 * time.Second):
-			t.Fatal("Receive timed out.")
+		case <-time.After(1 * time.Second):
 			break
 		}
 	}
+	if counter < NMSG {
+		t.Fatalf("Sent %d messages; got %d", NMSG, counter)
+	}
 
+	// CLEANUP //
 	t.Log("Cleaning up...")
 	//cleanup
 	csm.Stop()
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	close(bufs)
 	l.Close()
 	t.Log("Done.")
