@@ -136,7 +136,7 @@ func writeString(w Writer, s string) {
 
 	case n < 256:
 		w.WriteByte(mstr8)
-		w.WriteByte(byte(n))
+		w.WriteByte(byte(uint8(n)))
 		io.WriteString(w, s)
 
 	case n < 1<<16-1:
