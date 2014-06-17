@@ -9,8 +9,8 @@ import (
 var bigend = binary.BigEndian
 
 // Writer must satisfy Writer and ByteWriter
-// ideally, *bytes.Buffer
 // for speed, should also implement WriteString(s)(n, err)
+// *bytes.Buffer satisfies this interface, but you may use your own
 type Writer interface {
 	io.ByteWriter
 	io.Writer
