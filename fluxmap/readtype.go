@@ -175,7 +175,7 @@ func readString(r Reader) (s string, err error) {
 
 	//shortcut fixstr case
 	//mask 11100000 should be 10100000
-	if c&0x70 == 0x50 {
+	if c&0xe0 == 0xa0 {
 		//mask 00011111
 		n = uint32(c & 0x1f)
 		if n > 31 {
