@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	//ErrBadTag is returned when a readXxxx method is used on an incorrect flag
+	//ErrBadTag blah blah blah
 	ErrBadTag = errors.New("Bad tag.")
 )
 
@@ -72,4 +72,41 @@ func readInt(r Reader) (i int64, err error) {
 		err = ErrBadTag
 		return
 	}
+}
+
+func readUint(r Reader) (i uint64, err error) {
+
+	return
+}
+
+func readString(r Reader) (s string, err error) {
+
+	return
+}
+
+func readBin(r Reader) (p []byte, err error) {
+
+	return
+}
+
+func readExt(r Reader) (etype int8, dat []byte, err error) {
+
+	return
+}
+
+//returns the length of the map
+func readMapHeader(r Reader) (n int) {
+
+	return
+}
+
+func readNil(r Reader) (err error) {
+	c, err := r.ReadByte()
+	if err != nil {
+		return
+	}
+	if c != mnil {
+		err = ErrBadTag
+	}
+	return
 }

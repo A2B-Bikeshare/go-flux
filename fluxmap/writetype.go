@@ -19,7 +19,7 @@ type Writer interface {
 func writeMapHeader(w Writer, n uint32) {
 	switch {
 	case n < 16:
-		//10000000 OR 0000XXXX - retreive with &0xf
+		//fixmap is 1000XXXX: 10000000 OR 0000XXXX - retreive with &0xf
 		w.WriteByte(0x80 | byte(n))
 
 	case n < 1<<16-1:
