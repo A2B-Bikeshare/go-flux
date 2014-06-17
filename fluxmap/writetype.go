@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"unsafe"
 )
 
 var bigend = binary.BigEndian
@@ -39,29 +40,35 @@ func writeMapHeader(w Writer, n uint32) {
 func writeNil(w Writer) { w.WriteByte(mnil) }
 
 func writeFloat(w Writer, f float64) {
-	b := math.Abs(f)
+	var is uint32 //float32 bits
+	var ls uint64 //float64 bits
+	var g float32 //float32 conversion
+	var b float64 //float64 abs
+
+	b = math.Abs(f)
 	if b > math.MaxFloat32 || b < math.SmallestNonzeroFloat32 {
 		//write float64
 		w.WriteByte(mfloat64)
-		i := uint64(f)
-		w.WriteByte(byte(i >> 56))
-		w.WriteByte(byte(i >> 48))
-		w.WriteByte(byte(i >> 40))
-		w.WriteByte(byte(i >> 32))
-		w.WriteByte(byte(i >> 24))
-		w.WriteByte(byte(i >> 16))
-		w.WriteByte(byte(i >> 8))
-		w.WriteByte(byte(i))
-
+		ls = *(*uint64)(unsafe.Pointer(&f))
+		w.WriteByte(byte(ls >> 56))
+		w.WriteByte(byte(ls >> 48))
+		w.WriteByte(byte(ls >> 40))
+		w.WriteByte(byte(ls >> 32))
+		w.WriteByte(byte(ls >> 24))
+		w.WriteByte(byte(ls >> 16))
+		w.WriteByte(byte(ls >> 8))
+		w.WriteByte(byte(ls))
+		return
 	} else {
+		g = float32(f)
 		//write float32
 		w.WriteByte(mfloat32)
-		i := uint32(f)
-		w.WriteByte(byte(i >> 24))
-		w.WriteByte(byte(i >> 16))
-		w.WriteByte(byte(i >> 8))
-		w.WriteByte(byte(i))
-
+		is = *(*uint32)(unsafe.Pointer(&g))
+		w.WriteByte(byte(is >> 24))
+		w.WriteByte(byte(is >> 16))
+		w.WriteByte(byte(is >> 8))
+		w.WriteByte(byte(is))
+		return
 	}
 }
 

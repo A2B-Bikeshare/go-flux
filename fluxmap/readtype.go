@@ -3,6 +3,7 @@ package fluxmap
 import (
 	"errors"
 	"io"
+	"unsafe"
 )
 
 var (
@@ -44,12 +45,12 @@ func readInt(r Reader) (i int64, err error) {
 	}
 	//positive fixint
 	if (c & 0x80) == 0 {
-		i = int64(c & 0x7f)
+		i = int64(int8(c & 0x7f))
 		return
 	}
 	//negative fixint
-	if (c & 0xe0) == 0 {
-		i = int64(c & 0x1f)
+	if (c & 0xe0) == 0xe0 {
+		i = int64(int8(c))
 		return
 	}
 
@@ -59,24 +60,24 @@ func readInt(r Reader) (i int64, err error) {
 		if err != nil {
 			return
 		}
-		i = int64(n)
+		i = int64(int8(n))
 		return
 	case mint16:
 		_, err = r.Read(bs[:2])
 		if err != nil {
 			return
 		}
-		i = int64(uint16(bs[1]) | uint16(bs[0])<<8)
+		i = int64(int16(bs[1]) | (int16(bs[0]) << 8))
 		return
 	case mint32:
 		_, err = r.Read(bs[:4])
 		if err != nil {
 			return
 		}
-		i = int64(uint32(bs[3]) |
-			uint32(bs[2]<<8) |
-			uint32(bs[1])<<16 |
-			uint32(bs[0])<<24)
+		i = int64(int32(bs[3]) |
+			(int32(bs[2]) << 8) |
+			(int32(bs[1]) << 16) |
+			(int32(bs[0]) << 24))
 		return
 	case mint64:
 		_, err = r.Read(bs[:8])
@@ -203,14 +204,14 @@ func readString(r Reader) (s string, err error) {
 		if err != nil {
 			return
 		}
-		n = uint32(uint16(ns[1]) | uint16(ns[0])<<8)
+		n = uint32(uint16(ns[1]) | (uint16(ns[0]) << 8))
 
 	case mstr32:
 		_, err = r.Read(ns[:4])
 		if err != nil {
 			return
 		}
-		n = uint32(uint32(ns[3]) | uint32(ns[2])<<8 | uint32(ns[1])<<16 | uint32(ns[0])<<24)
+		n = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
 
 	default:
 		err = ErrBadTag
@@ -251,14 +252,14 @@ func readBin(r Reader, p []byte) (err error) {
 		if err != nil {
 			return
 		}
-		n = uint32(uint16(ns[1]) | uint16(ns[0])<<8)
+		n = uint32(uint16(ns[1]) | (uint16(ns[0]) << 8))
 
 	case mbin32:
 		_, err = r.Read(ns[:4])
 		if err != nil {
 			return
 		}
-		n = uint32(uint32(ns[3]) | uint32(ns[2])<<8 | uint32(ns[1])<<16 | uint32(ns[0])<<24)
+		n = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
 
 	default:
 		err = ErrBadTag
@@ -320,14 +321,14 @@ func readExt(r Reader, dat []byte) (etype int8, err error) {
 			return
 
 		}
-		n = uint32(uint16(ns[1]) | uint16(ns[0])<<8)
+		n = uint32(uint16(ns[1]) | (uint16(ns[0]) << 8))
 
 	case mext32:
 		_, err = r.Read(ns[:4])
 		if err != nil {
 			return
 		}
-		n = uint32(uint32(ns[3]) | uint32(ns[2])<<8 | uint32(ns[1])<<16 | uint32(ns[0])<<24)
+		n = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
 
 	default:
 		err = ErrBadTag
@@ -399,11 +400,11 @@ func readMapHeader(r Reader) (n uint32, err error) {
 	switch c {
 	case mmap16:
 		_, err = r.Read(ns[:2])
-		n = uint32(uint16(ns[1]) | uint16(ns[0])<<8)
+		n = uint32(uint16(ns[1]) | (uint16(ns[0]) << 8))
 
 	case mmap32:
 		_, err = r.Read(ns[:4])
-		n = uint32(uint32(ns[3]) | uint32(ns[2])<<8 | uint32(ns[1])<<16 | uint32(ns[0])<<24)
+		n = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
 
 	default:
 		err = ErrBadTag
@@ -423,4 +424,50 @@ func readNil(r Reader) (err error) {
 		err = ErrBadTag
 	}
 	return
+}
+
+func readFloat(r Reader) (f float64, err error) {
+	var c byte
+	var ns [8]byte
+	var g float32
+	var fu uint64
+	var fg uint32
+
+	c, err = r.ReadByte()
+	if err != nil {
+		return
+	}
+
+	switch c {
+	case mfloat32:
+		_, err = r.Read(ns[:4])
+		if err != nil {
+			return
+		}
+		fg = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
+		g = *(*float32)(unsafe.Pointer(&fg))
+		f = float64(g)
+		return
+
+	case mfloat64:
+		_, err = r.Read(ns[:8])
+		if err != nil {
+			return
+		}
+		fu = uint64(uint64(ns[7]) |
+			(uint64(ns[6]) << 8) |
+			(uint64(ns[5]) << 16) |
+			(uint64(ns[4]) << 24) |
+			(uint64(ns[3]) << 32) |
+			(uint64(ns[2]) << 40) |
+			(uint64(ns[1]) << 48) |
+			(uint64(ns[0]) << 56))
+		f = *(*float64)(unsafe.Pointer(&fu))
+		return
+
+	default:
+		err = ErrBadTag
+		return
+
+	}
 }
