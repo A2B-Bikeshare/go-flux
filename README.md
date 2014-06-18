@@ -1,22 +1,19 @@
-Fluxlog
+Flux for Go
 =====================
-Write *all the messages*!
+Write *all the messages*.
 Powered by [NSQ](http://nsq.io/) and a custom dialect of [MessagePack](http://msgpack.org).
 
 Intro
 -------------
 Note: Fluxlog is currently under *heavy* development. Please don't use it.
 
-Fluxlog has two parts:
-  - Go Package - import 'github.com/philhofer/fluxlog' - Sends messages over NSQ to be picked up by a fluxlog client
-  - Client - Sits in front of your database and writes *all the messages*
+Fluxlog has three parts:
+  - flux/msg contains the encode and decode API for flux messages
+  - flux/log contains the API for writing flux messages to an [NSQ](http://nsq.io) daemon
+  - flux/fluxd contains the API for reading flux messages from an [NSQ](http://nsq.io) topic and writing them to a supported database.
 
-Fluxlog is designed to robust, fault-tolerant, and FAST. However, there are
-restrictions on the form of your data.
-
-Currently, I'm working on clients for Elasticsearch and InfluxDB. MongoDB is next on the list. Each client will know how to parse
-a fluxmap schema directly into JSON without using an intermediate Go representation, which should
-make it inherently faster than most existing solutions.
+Currently, I have plans to implement streaming JSON encoders to turn flux messages into [Elasticsearch](http://elasticsearch.org)- and [InfluxDB](http://influxdb.com)-compatible JSON.
+In the long run, I'd like to have MongoDB and Neo4j implemented as well.
 
 Performance
 -------------
