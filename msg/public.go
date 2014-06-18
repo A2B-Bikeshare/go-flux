@@ -10,6 +10,7 @@ type PackExt struct {
 }
 
 /* Write takes an object and writes it to a Writer
+
  Supported type are:
  - float64 (msg.Float)
  - bool (msg.Bool)
@@ -18,11 +19,11 @@ type PackExt struct {
  - string (msg.String)
  - []byte (msg.Bin)
  - *msg.PackExt (msg.Ext) - a messagepack extension type
+
 Each type will be compacted on writing if it
 does not require all of its bits to represent itself.
 Write returns ErrTypeNotSupported if a bad type is given.
-Write returns ErrIncorrectType if the type given does not match the interface{} type
-
+Write returns ErrIncorrectType if the type given does not match the interface{} type.
 Alternatively, you can use one of the WriteXxxx() methods provided. */
 func WriteInterface(w Writer, v interface{}, t Type) error {
 	switch t {
@@ -197,16 +198,17 @@ func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
 	return p, nil
 }
 
-// ReadInterface returns an interface{} containing the leading object in the reader,
-// along with its msg.Type.
-// Provided no error is returned, the following type assertions on the interface{} should be legal:
-// msg.Int -> int64
-// msg.Uint -> uint64
-// msg.Bool -> bool
-// msg.Ext -> *msg.PackExt
-// msg.Bin -> []byte
-// msg.String -> string
-// msg.Float -> float64
+/* ReadInterface returns an interface{} containing the leading object in the reader,
+along with its msg.Type.
+
+Provided no error is returned, the following type assertions on the interface{} should be legal:
+ - msg.Int -> int64
+ - msg.Uint -> uint64
+ - msg.Bool -> bool
+ - msg.Ext -> *msg.PackExt
+ - msg.Bin -> []byte
+ - msg.String -> string
+ - msg.Float -> float64	*/
 func ReadInterface(r Reader) (v interface{}, t Type, err error) {
 	var c byte
 
