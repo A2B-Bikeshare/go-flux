@@ -20,14 +20,14 @@ type Object struct {
 	Name string
 }
 
-//MakeSchema makes a Schema out of a map[string]interface{}
-//Supported interface{} values are:
-// float64, float32
-// uint8, uint16, uint32, uint64
-// int8, int16, int32, int64
-// bool
-// string
-// []byte (binary)
+/* MakeSchema makes a Schema out of a map[string]interface{}
+Supported interface{} values are:
+float64, float32
+uint8, uint16, uint32, uint64
+int8, int16, int32, int64
+bool
+string
+[]byte (binary) */
 func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	if len(names) != len(types) {
 		err = ErrBadArgs

@@ -9,21 +9,21 @@ type PackExt struct {
 	Data []byte
 }
 
-// Write takes an object and writes it to a Writer
-// Supported type are:
-// - float64 (msg.Float)
-// - bool (msg.Bool)
-// - int64 (msg.Int)
-// - uint64 (msg.Uint)
-// - string (msg.String)
-// - []byte (msg.Bin)
-// - *msg.PackExt (msg.Ext) - a messagepack extension type
-// Each type will be compacted on writing if it
-// does not require all of its bits to represent itself.
-// Write returns ErrTypeNotSupported if a bad type is given.
-// Write returns ErrIncorrectType if the type given does not match the interface{} type
-//
-// Alternatively, you can use one of the WriteXxxx() methods provided.
+/* Write takes an object and writes it to a Writer
+ Supported type are:
+ - float64 (msg.Float)
+ - bool (msg.Bool)
+ - int64 (msg.Int)
+ - uint64 (msg.Uint)
+ - string (msg.String)
+ - []byte (msg.Bin)
+ - *msg.PackExt (msg.Ext) - a messagepack extension type
+Each type will be compacted on writing if it
+does not require all of its bits to represent itself.
+Write returns ErrTypeNotSupported if a bad type is given.
+Write returns ErrIncorrectType if the type given does not match the interface{} type
+
+Alternatively, you can use one of the WriteXxxx() methods provided. */
 func WriteInterface(w Writer, v interface{}, t Type) error {
 	switch t {
 	case String:
@@ -114,8 +114,7 @@ func WriteExt(w Writer, etype int8, data []byte) {
 // translate to the ReadXxxx() method called, it
 // unreads the leading byte so that another
 // ReadXxxx() method can be attempted.
-
-// ReadFloat tries to read into a float64
+// ReadFloat tries to read into a float64.
 func ReadFloat(r Reader) (f float64, err error) {
 	f, err = readFloat(r)
 	if err != nil {

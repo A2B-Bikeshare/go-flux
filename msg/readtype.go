@@ -12,8 +12,8 @@ var (
 	ErrBadTag = errors.New("Bad tag.")
 )
 
-//Reader must implement io.Reader, io.ByteReader, and be able to unread a byte
-//*bytes.Buffer and *bytes.Reader satisfy this interface, but you may use your own
+//Reader must implement io.Reader, io.ByteReader, and be able to unread a byte.
+//(*bytes.Buffer and *bytes.Reader satisfy this interface)
 type Reader interface {
 	io.Reader
 	io.ByteReader
