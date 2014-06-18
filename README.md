@@ -21,9 +21,14 @@ make it inherently faster than most existing solutions.
 Performance
 -------------
 Fluxlog's performance comes from a couple different design decisions:
-  1. Schemas are 'compiled' in advance. Consequently, there is no type reflection necessary for serialization. *However*, schemas can be compiled during runtime.
-  2. Schemas have byte-for-byte serialization methods, and the serializer compacts values (e.g. int64->int16) where possible.
-  3. Schemas eliminate about 50% of the overhead traditionally associated with maps, as they do not re-send key values each time.
-  4. Log() methods don't incur context switches unless the publisher hasn't caught up (which is unlikely).
+  - "Messages" are statically-typed orderings of data.
+  - Type reflection is done *once* per message 'type', rather than at every call to Decode(). A message 'type' is called a Schema.
+  - Since schemas contain the data keys, the keys themselves are not serialized.
+  - Values are packed on writing (e.g. int64(5) is encoded as an int8, and then decoded back to an int64)
 
+Here's how long it takes to encode a message containing a string, int64, uint64, float64, and 3 arbitrary bytes: (MacBook, Intel Core i7; GOMAXPROCS=1)
 ![benchmark](./BenchmarkEncode.png)
+
+Note that the sum of the sizes of the message values is 50 bytes, and the data is 32 bytes after encoding. The data rate above is calculated from the encoded size (32B).
+
+TL;DR you can saturate your Gigabit connection if you want to.

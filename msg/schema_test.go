@@ -126,7 +126,9 @@ func BenchmarkEncode(b *testing.B) {
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
 	s.Encode(values, buf)
-	b.SetBytes(int64(len(buf.Bytes())))
+	nbytes := int64(len(buf.Bytes()))
+	b.Logf("Data is %d bytes after encoding.", nbytes)
+	b.SetBytes(nbytes)
 	buf.Reset()
 
 	b.ResetTimer()
