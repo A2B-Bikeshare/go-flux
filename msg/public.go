@@ -22,6 +22,8 @@ type PackExt struct {
 // does not require all of its bits to represent itself.
 // Write returns ErrTypeNotSupported if a bad type is given.
 // Write returns ErrIncorrectType if the type given does not match the interface{} type
+//
+// Alternatively, you can use one of the WriteXxxx() methods provided.
 func Write(w Writer, v interface{}, t Type) error {
 	switch t {
 	case String:
@@ -30,46 +32,80 @@ func Write(w Writer, v interface{}, t Type) error {
 			return ErrIncorrectType
 		}
 		writeString(w, s)
+		return nil
 	case Int:
 		i, ok := v.(int64)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeInt(w, i)
+		return nil
 	case Uint:
 		u, ok := v.(uint64)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeUint(w, u)
+		return nil
 	case Float:
 		f, ok := v.(float64)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeFloat(w, f)
+		return nil
 	case Bool:
 		t, ok := v.(bool)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeBool(w, t)
+		return nil
 	case Bin:
 		b, ok := v.([]byte)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeBin(w, b)
+		return nil
 	case Ext:
 		ext, ok := v.(PackExt)
 		if !ok {
 			return ErrIncorrectType
 		}
 		writeExt(w, ext.Type, ext.Data)
+		return nil
 	default:
 		return ErrTypeNotSupported
 	}
-	return ErrTypeNotSupported
+}
+
+func WriteFloat(w Writer, f float64) {
+	writeFloat(w, f)
+}
+
+func WriteBool(w Writer, b bool) {
+	writeBool(w, b)
+}
+
+func WriteInt(w Writer, i int64) {
+	writeInt(w, i)
+}
+
+func WriteUint(w Writer, u uint64) {
+	writeUint(w, u)
+}
+
+func WriteString(w Writer, s string) {
+	writeString(w, s)
+}
+
+func WriteBin(w Writer, b []byte) {
+	writeBin(w, b)
+}
+
+func WriteExt(w Writer, etype int8, data []byte) {
+	writeExt(w, etype, data)
 }
 
 // ReadXxxx() methods try to read values
@@ -78,72 +114,60 @@ func Write(w Writer, v interface{}, t Type) error {
 // translate to the ReadXxxx() method called, it
 // unreads the leading byte so that another
 // ReadXxxx() method can be attempted.
-//
-//
 
 // ReadFloat tries to read into a float64
-func ReadFloat(r Reader, f *float64) error {
-	g, err := readFloat(r)
+func ReadFloat(r Reader) (f float64, err error) {
+	f, err = readFloat(r)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	f = &g
-	return nil
+	return
 }
 
 // ReadInt tries to read into an int64
-func ReadInt(r Reader, i *int64) error {
-	g, err := readInt(r)
+func ReadInt(r Reader) (i int64, err error) {
+	i, err = readInt(r)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	i = &g
-	return nil
+	return
 }
 
 // ReadUint tries to read into a uint64
-func ReadUint(r Reader, u *uint64) error {
-	g, err := readUint(r)
+func ReadUint(r Reader) (u uint64, err error) {
+	u, err = readUint(r)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	u = &g
-	return nil
+	return
 }
 
 // ReadString tries to read into a string
-func ReadString(r Reader, s *string) error {
-	g, err := readString(r)
+func ReadString(r Reader) (s string, err error) {
+	s, err = readString(r)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	s = &g
-	return nil
+	return
 }
 
 // ReadBool tries to read into a bool
-func ReadBool(r Reader, b *bool) error {
-	g, err := readBool(r)
+func ReadBool(r Reader) (b bool, err error) {
+	b, err = readBool(r)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	b = &g
-	return nil
+	return
 }
 
 // ReadBin tries to read into a byte slice

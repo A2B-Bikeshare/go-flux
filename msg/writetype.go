@@ -12,6 +12,8 @@ var bigend = binary.BigEndian
 // Writer must satisfy Writer and ByteWriter
 // for speed, should also implement WriteString(s)(n, err)
 // *bytes.Buffer satisfies this interface, but you may use your own
+// Write() and WriteByte() *cannot* fail, so Writer
+// must be some kind of buffered writer.
 type Writer interface {
 	io.ByteWriter
 	io.Writer
