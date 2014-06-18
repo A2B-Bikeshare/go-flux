@@ -16,7 +16,6 @@ func assertEqual(a []byte, b []byte, t *testing.T) {
 		t.Errorf("Encoded %x, but should be %x", a, b)
 		t.Errorf("Used prefix %x; should be %x", a[0], b[0])
 	}
-	t.Logf("Encoded %x.", a)
 }
 
 func mpencode(v interface{}) (b []byte, err error) {

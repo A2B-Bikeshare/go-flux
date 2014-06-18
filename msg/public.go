@@ -1,6 +1,6 @@
 package msg
 
-// PackExt represents a MessagePack extension
+// PackExt represents a MessagePack extension, and has type msg.Ext
 type PackExt struct {
 	// Type is an 8-bit signed integer. The MessagePack standard dictates that 0 through 127
 	// are permitted, while negative values are reserved for future use.
@@ -17,14 +17,14 @@ type PackExt struct {
 // - uint64 (msg.Uint)
 // - string (msg.String)
 // - []byte (msg.Bin)
-// - msg.Ext (msg.Ext) - a messagepack extension type
+// - *msg.PackExt (msg.Ext) - a messagepack extension type
 // Each type will be compacted on writing if it
 // does not require all of its bits to represent itself.
 // Write returns ErrTypeNotSupported if a bad type is given.
 // Write returns ErrIncorrectType if the type given does not match the interface{} type
 //
 // Alternatively, you can use one of the WriteXxxx() methods provided.
-func Write(w Writer, v interface{}, t Type) error {
+func WriteInterface(w Writer, v interface{}, t Type) error {
 	switch t {
 	case String:
 		s, ok := v.(string)
@@ -69,7 +69,7 @@ func Write(w Writer, v interface{}, t Type) error {
 		writeBin(w, b)
 		return nil
 	case Ext:
-		ext, ok := v.(PackExt)
+		ext, ok := v.(*PackExt)
 		if !ok {
 			return ErrIncorrectType
 		}
@@ -171,35 +171,44 @@ func ReadBool(r Reader) (b bool, err error) {
 }
 
 // ReadBin tries to read into a byte slice
-func ReadBin(r Reader, b []byte) error {
-	err := readBin(r, b)
+// 'b' is used for buffering in order to avoid allocations,
+// but it can safely be nil
+func ReadBin(r Reader, b []byte) (dat []byte, err error) {
+	dat, err = readBin(r, b)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
 	}
-	return nil
+	return
 }
 
 // ReadExt tries to read into an PackExt
-func ReadExt(r Reader, e *PackExt) error {
-	etype, err := readExt(r, e.Data)
+// 'b' is used for buffering in order to avoid allocations,
+// but it can safely be nil
+func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
+	dat, etype, err := readExt(r, b)
 	if err != nil {
 		if err == ErrBadTag {
 			r.UnreadByte()
 		}
-		return err
+		return nil, err
 	}
-	e.Type = etype
-	return nil
+	p = &PackExt{Type: etype, Data: dat}
+	return p, nil
 }
 
-// ReadInterface returns an interface containing the leading object in the reader
-// NOTE: Reading an interface value and type-switching on it eliminates
-// most of the performance advantages of fluxmsg encoding, so only
-// use it if you absolutely have to.
-func ReadInterface(r Reader) (v interface{}, err error) {
+// ReadInterface returns an interface{} containing the leading object in the reader,
+// along with its msg.Type.
+// Provided no error is returned, the following type assertions on the interface{} should be legal:
+// msg.Int -> int64
+// msg.Uint -> uint64
+// msg.Bool -> bool
+// msg.Ext -> *msg.PackExt
+// msg.Bin -> []byte
+// msg.String -> string
+// msg.Float -> float64
+func ReadInterface(r Reader) (v interface{}, t Type, err error) {
 	var c byte
 
 	c, err = r.ReadByte()
@@ -211,16 +220,19 @@ func ReadInterface(r Reader) (v interface{}, err error) {
 	switch {
 	//fixint
 	case (c & 0x80) == 0:
+		t = Int
 		v = int64(int8(c & 0x7f))
 		return
 
 	//negative fixint
 	case (c & 0xe0) == 0xe0:
+		t = Int
 		v = int64(int8(c))
 		return
 
 	//fixstr
 	case c&0xe0 == 0xa0:
+		t = String
 		err = r.UnreadByte()
 		if err != nil {
 			return
@@ -232,12 +244,15 @@ func ReadInterface(r Reader) (v interface{}, err error) {
 	//non-fix cases
 	switch c {
 	case mfalse:
+		t = Bool
 		v = false
 		return
 	case mtrue:
+		t = Bool
 		v = true
 		return
 	case mint8, mint16, mint32, mint64:
+		t = Int
 		err = r.UnreadByte()
 		if err != nil {
 			return
@@ -245,6 +260,7 @@ func ReadInterface(r Reader) (v interface{}, err error) {
 		v, err = readInt(r)
 		return
 	case muint8, muint16, muint32, muint64:
+		t = Uint
 		err = r.UnreadByte()
 		if err != nil {
 			return
@@ -252,6 +268,7 @@ func ReadInterface(r Reader) (v interface{}, err error) {
 		v, err = readUint(r)
 		return
 	case mfloat32, mfloat64:
+		t = Float
 		err = r.UnreadByte()
 		if err != nil {
 			return
@@ -259,24 +276,29 @@ func ReadInterface(r Reader) (v interface{}, err error) {
 		v, err = readFloat(r)
 		return
 	case mbin8, mbin16, mbin32:
+		t = Bin
 		err = r.UnreadByte()
 		if err != nil {
 			return
 		}
-		v = make([]byte, 0, 32)
-		err = readBin(r, v.([]byte))
+		v, err = readBin(r, nil)
 		return
 	case mfixext1, mfixext2, mfixext4, mfixext8, mfixext16, mext8, mext16, mext32:
+		t = Ext
 		err = r.UnreadByte()
 		if err != nil {
 			return
 		}
 		var etype int8
-		data := make([]byte, 0, 32)
-		etype, err = readExt(r, data)
-		v = &PackExt{Type: etype, Data: data}
+		var dat []byte
+		dat, etype, err = readExt(r, nil)
+		if err != nil {
+			return
+		}
+		v = &PackExt{Type: etype, Data: dat}
 		return
 	case mstr8, mstr16, mstr32:
+		t = String
 		err = r.UnreadByte()
 		if err != nil {
 			return

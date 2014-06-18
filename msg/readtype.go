@@ -1,6 +1,7 @@
 package msg
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"unsafe"
@@ -228,7 +229,7 @@ func readString(r Reader) (s string, err error) {
 }
 
 //read binary into p
-func readBin(r Reader, p []byte) (err error) {
+func readBin(r Reader, p []byte) (dat []byte, err error) {
 	var c byte     //leading byte
 	var n uint32   //length
 	var ns [4]byte //for length bytes
@@ -245,7 +246,7 @@ func readBin(r Reader, p []byte) (err error) {
 		if err != nil {
 			return
 		}
-		n = uint32(c)
+		n = uint32(uint8(c))
 
 	case mbin16:
 		_, err = r.Read(ns[:2])
@@ -266,18 +267,18 @@ func readBin(r Reader, p []byte) (err error) {
 		return
 
 	}
-	//read into p; return
-	if cap(p) < int(n) {
-		//allocate if p is not long enough
-		p = make([]byte, n)
-	} else {
-		p = p[:n]
-	}
-	_, err = r.Read(p[:n])
+
+	buf := bytes.NewBuffer(p)
+	_, err = io.CopyN(buf, r, int64(n))
+	dat = buf.Bytes()
 	return
+
 }
 
-func readExt(r Reader, dat []byte) (etype int8, err error) {
+//b is used for buffering to avoid unnecessary allocations.
+func readExt(r Reader, b []byte) (dat []byte, etype int8, err error) {
+	var bs [16]byte
+
 	var c byte //leading byte
 
 	c, err = r.ReadByte()
@@ -287,21 +288,29 @@ func readExt(r Reader, dat []byte) (etype int8, err error) {
 
 	switch c {
 	case mfixext1:
-		etype, err = readfixExt(r, dat, 1)
+		etype, err = readfixExt(r, bs[:1], 1)
+		dat = bs[:1]
 		return
 	case mfixext2:
-		etype, err = readfixExt(r, dat, 2)
+		etype, err = readfixExt(r, bs[:2], 2)
+		dat = bs[:2]
 		return
 	case mfixext4:
-		etype, err = readfixExt(r, dat, 4)
+		etype, err = readfixExt(r, bs[:4], 4)
+		dat = bs[:4]
 		return
 	case mfixext8:
-		etype, err = readfixExt(r, dat, 8)
+		etype, err = readfixExt(r, bs[:8], 8)
+		dat = bs[:8]
 		return
 	case mfixext16:
-		etype, err = readfixExt(r, dat, 16)
+		etype, err = readfixExt(r, bs[:16], 16)
+		dat = bs[:16]
 		return
 	}
+
+	buf := bytes.NewBuffer(b)
+	buf.Reset()
 
 	var n uint32   //length
 	var ns [4]byte //length bytes
@@ -342,12 +351,12 @@ func readExt(r Reader, dat []byte) (etype int8, err error) {
 	}
 	etype = int8(c)
 
-	if cap(dat) < int(n) {
-		dat = make([]byte, n)
-	} else {
-		dat = dat[:n]
+	//CopyN will cause no allocations if NewBuffer() used a sufficiently large starting slice
+	_, err = io.CopyN(buf, r, int64(n))
+	if err != nil {
+		return
 	}
-	_, err = r.Read(dat)
+	dat = buf.Bytes()
 
 	return
 }
@@ -364,18 +373,10 @@ func readfixExt(r Reader, dat []byte, size uint8) (etype int8, err error) {
 	}
 	etype = int8(c)
 
-	if cap(dat) >= int(size) {
-		dat = dat[:size]
-		_, err = r.Read(dat)
-		return
-	}
-
-	var bs [16]byte //max size
-	_, err = r.Read(bs[:size])
+	_, err = r.Read(dat[:size])
 	if err != nil {
 		return
 	}
-	dat = bs[:size]
 	return
 
 }

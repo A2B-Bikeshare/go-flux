@@ -58,6 +58,7 @@ func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	return
 }
 
+/*
 func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	var t Type
 	var n string
@@ -113,6 +114,7 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	}
 	return nil
 }
+*/
 
 //Encode uses a schema to encode a slice-of-interface to a writer
 func (s *Schema) Encode(a []interface{}, w Writer) (err error) {
