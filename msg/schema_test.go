@@ -1,4 +1,4 @@
-package fluxmap
+package msg
 
 import (
 	"bytes"
@@ -61,7 +61,7 @@ func TestMakeSchema(t *testing.T) {
 		case String:
 			str, ok := values[i].(string)
 			if !ok {
-				t.Errorf("Test case %d: Couldn't marshal to type %v")
+				t.Errorf("Test case %d: Couldn't marshal to type %v", i, String)
 			}
 			if !reflect.DeepEqual(str, values[i]) {
 				t.Errorf("%q != %q", str, values[i])

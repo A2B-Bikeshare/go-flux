@@ -1,4 +1,4 @@
-package fluxmap
+package msg
 
 import (
 	"errors"

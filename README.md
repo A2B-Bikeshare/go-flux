@@ -25,3 +25,5 @@ Fluxlog's performance comes from a couple different design decisions:
   2. Schemas have byte-for-byte serialization methods, and the serializer compacts values (e.g. int64->int16) where possible.
   3. Schemas eliminate about 50% of the overhead traditionally associated with maps, as they do not re-send key values each time.
   4. Log() methods don't incur context switches unless the publisher hasn't caught up (which is unlikely).
+
+![benchmark](./BenchmarkEncode.png)

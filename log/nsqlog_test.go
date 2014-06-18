@@ -1,6 +1,6 @@
 // +build nsq
 
-package fluxlog
+package log
 
 import (
 	//"bytes"

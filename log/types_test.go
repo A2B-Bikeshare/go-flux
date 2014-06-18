@@ -1,4 +1,4 @@
-package fluxlog
+package log
 
 import (
 	"bytes"
