@@ -8,7 +8,7 @@ Intro
 Note: Fluxlog is currently under *heavy* development. Please don't use it.
 
 Fluxlog has three parts:
-  - flux/msg contains the encode and decode API for flux messages
+  - flux/msg contains the encode/decode API for flux messages
   - flux/log contains the API for writing flux messages to an [NSQ](http://nsq.io) daemon
   - flux/fluxd contains the API for reading flux messages from an [NSQ](http://nsq.io) topic and writing them to a supported database.
 
@@ -17,22 +17,34 @@ In the long run, I'd like to have MongoDB and Neo4j implemented as well.
 
 Performance
 -------------
-Fluxlog's performance comes from a couple different design decisions:
+First things first: flux/msg is designed for small messages, and serves as a substitute for compression provided that your messages are indeed small. One of the ways
+flux/msg achieves small encoded sizes is by stripping keys out of your data, so, in the case that keys are a non-trivial part of your message size, you can
+save quite a bit of space over the wire. Encode/Decode methods are optimized for small data members (size <= 32B) as a consequence.
+If you have big messages (and small keys), the only real advantage flux/msg has is the lack of type reflection overhead. (Additionally, schemas
+have shortcut methods for marshaling messages to JSON, which can be highly performant in the case that you need to communicate with your database, etc. in JSON.)
+
+Fluxlog's encode/decode performance comes from a couple different design decisions:
   - "Messages" are statically-typed orderings of data.
   - Type reflection is done *once* per message 'type', rather than at every call to Decode(). A message 'type' is called a Schema.
   - Since schemas contain the data keys, the keys themselves are not serialized.
   - Values are packed on writing (e.g. int64(5) is encoded as an int8, and then decoded back to an int64)
 
-Here's how long it takes to encode a message containing a string, int64, uint64, float64, and 3 arbitrary bytes: (MacBook, Intel Core i7; GOMAXPROCS=1)
+Here's how long it takes to encode a message containing a string, int64, uint64, float64, and 3 arbitrary bytes (MacBook, Intel Core i7; GOMAXPROCS=1), and also
+the decoding time for two different decoding methods:
+
 ![benchmark](./BenchmarkEncode.png)
 
 Note that the sum of the sizes of the message values is 50 bytes, and the data is 32 bytes after encoding. The data rate above is calculated from the encoded size (32B).
+Much of the decoding speed is derived from pre-emptively creating arrays on the stack that can be used by the encoded data. (In other words, stack space is occasionally
+wasted to save heap allocations.)
 
 TL;DR you can saturate your Gigabit connection if you want to.
 
 Examples
 -----------
-### Struct fluxmsg encoding/decoding
+### Struct flux/msg manual encoding/decoding
+Here's an example of implementing custom encoding/decoding for a simple struct, which is one of the most highly performant (albiet verbose)
+ways to marshal/unmarshal messages and avoid allocations.
 ```go
 // github.com/philhofer/go-flux/msg/examples/struct_example.go
 
