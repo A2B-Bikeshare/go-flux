@@ -58,12 +58,15 @@ func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	return
 }
 
-/*
+// DecodeToMap uses a schema to decode a fluxmsg stream into a map[string]interface{}.
+// The map keys are the Name fields of each msg.Object in the msg.Schema.
 func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	var t Type
 	var n string
 	var ns interface{}
-	var bs []byte
+	var bs [16]byte
+	var etype int8
+	var dat []byte
 	var err error
 	for _, o := range *s {
 		t = o.T
@@ -99,12 +102,18 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 			m[n] = ns
 
 		case Bin:
-			bs = make([]byte, 32)
-			err = readBin(r, bs)
+			dat, err = readBin(r, bs[:16])
 			if err != nil {
 				return err
 			}
-			m[n] = ns
+			m[n] = dat
+
+		case Ext:
+			dat, etype, err = readExt(r, bs[:16])
+			if err != nil {
+				return err
+			}
+			m[n] = &PackExt{Type: etype, Data: dat}
 
 		default:
 			err = ErrIncorrectType
@@ -114,7 +123,6 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	}
 	return nil
 }
-*/
 
 //Encode uses a schema to encode a slice-of-interface to a writer
 func (s *Schema) Encode(a []interface{}, w Writer) (err error) {

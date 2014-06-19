@@ -137,3 +137,84 @@ func BenchmarkEncode(b *testing.B) {
 		buf.Reset()
 	}
 }
+
+func TestSchemaDecodetoMap(t *testing.T) {
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(40)
+	s.Encode(values, buf)
+
+	m := make(map[string]interface{})
+
+	err = s.DecodeToMap(buf, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for key, val := range m {
+		switch key {
+		case "float":
+			f, ok := val.(float64)
+			if !ok {
+				t.Errorf("Couldn't cast %v to float64", val)
+				continue
+			}
+			if float32(f) != float32(values[0].(float64)) {
+				t.Errorf("Expected %v, got %v", values[0], f)
+			}
+		case "int":
+			i, ok := val.(int64)
+			if !ok {
+				t.Errorf("Couldn't cast %v to int64", val)
+				continue
+			}
+			if i != values[1].(int64) {
+				t.Errorf("Expected %v, got %v", values[1], i)
+			}
+		case "uint":
+			u, ok := val.(uint64)
+			if !ok {
+				t.Errorf("Couldn't cast %v to uint64", val)
+				continue
+			}
+			if u != values[2].(uint64) {
+				t.Errorf("Expected %v, got %v", values[2], u)
+			}
+		case "string":
+			s, ok := val.(string)
+			if !ok {
+				t.Errorf("Couldn't cast %v to string", s)
+				continue
+			}
+			if s != values[3].(string) {
+				t.Errorf("Expected %s, got %s", values[3], s)
+			}
+		case "bin":
+			bts, ok := val.([]byte)
+			if !ok {
+				t.Errorf("Couldn't cast %v to []byte", val)
+				continue
+			}
+			if !reflect.DeepEqual(bts, values[4].([]byte)) {
+				t.Errorf("Expected %v, got %v", values[4], bts)
+			}
+
+		default:
+			t.Errorf("Unknown name in map: %q", key)
+			continue
+		}
+	}
+
+}

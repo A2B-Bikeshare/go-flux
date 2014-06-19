@@ -269,6 +269,7 @@ func readBin(r Reader, p []byte) (dat []byte, err error) {
 	}
 
 	buf := bytes.NewBuffer(p)
+	buf.Reset()
 	_, err = io.CopyN(buf, r, int64(n))
 	dat = buf.Bytes()
 	return
