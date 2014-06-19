@@ -129,7 +129,7 @@ func (s *Schema) DecodeToSlice(r Reader, v []interface{}) error {
 			if err != nil {
 				return err
 			}
-			v[i] = &PackExt{Type: etype, Data: dat}
+			v[i] = &PackExt{EType: etype, Data: dat}
 			continue
 
 		default:
@@ -198,7 +198,7 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 			if err != nil {
 				return err
 			}
-			m[n] = &PackExt{Type: etype, Data: dat}
+			m[n] = &PackExt{EType: etype, Data: dat}
 
 		default:
 			err = ErrIncorrectType

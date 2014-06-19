@@ -1,9 +1,9 @@
 package flux
 
 import (
-	_ "github.com/philhofer/go-flux/fluxd"
-	_ "github.com/philhofer/go-flux/log"
-	_ "github.com/philhofer/go-flux/msg"
+	_ "github.com/A2B-Bikeshare/go-flux/fluxd"
+	_ "github.com/A2B-Bikeshare/go-flux/log"
+	_ "github.com/A2B-Bikeshare/go-flux/msg"
 )
 
 /*

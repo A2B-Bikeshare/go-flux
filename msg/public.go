@@ -5,7 +5,7 @@ package msg
 type PackExt struct {
 	// Type is an 8-bit signed integer. The MessagePack standard dictates that 0 through 127
 	// are permitted, while negative values are reserved for future use.
-	Type int8
+	EType int8
 	// Data is the data stored in the extension.
 	Data []byte
 }
@@ -76,7 +76,7 @@ func WriteInterface(w Writer, v interface{}, t Type) error {
 		if !ok {
 			return ErrIncorrectType
 		}
-		writeExt(w, ext.Type, ext.Data)
+		writeExt(w, ext.EType, ext.Data)
 		return nil
 	default:
 		return ErrTypeNotSupported
@@ -196,7 +196,7 @@ func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
 		}
 		return nil, err
 	}
-	p = &PackExt{Type: etype, Data: dat}
+	p = &PackExt{EType: etype, Data: dat}
 	return p, nil
 }
 
@@ -298,7 +298,7 @@ func ReadInterface(r Reader) (v interface{}, t Type, err error) {
 		if err != nil {
 			return
 		}
-		v = &PackExt{Type: etype, Data: dat}
+		v = &PackExt{EType: etype, Data: dat}
 		return
 	case mstr8, mstr16, mstr32:
 		t = String

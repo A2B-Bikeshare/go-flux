@@ -17,7 +17,7 @@ func TestReadWriteInterfacePublic(t *testing.T) {
 	testVals[3] = uint64(1000000)
 	testVals[4] = "A test string. Mmmm."
 	testVals[5] = []byte{1, 14, 199, 7}
-	testVals[6] = &PackExt{Type: 4, Data: []byte{7, 8, 9}}
+	testVals[6] = &PackExt{EType: 4, Data: []byte{7, 8, 9}}
 
 	for i, val := range testVals {
 		buf := bytes.NewBuffer(nil)
