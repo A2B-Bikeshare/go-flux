@@ -20,6 +20,46 @@ type Object struct {
 	Name string
 }
 
+// Serialize packs the schema itself into a msg
+func (s *Schema) SerializeTo(w Writer) {
+	n := len(*s)
+	//write length
+	WriteInt(w, int64(n))
+
+	//write objects
+	for _,o := range (*s) {
+		WriteUint(w, uint64(o.T))
+		WriteString(w, o.Name)
+	}
+}
+
+// ReadSchema returns a Schema from the output of s.SerializeTo()
+func ReadSchema(r Reader) (s *Schema, err error) {
+	n, err := ReadInt(r)
+	if err != nil {
+		return
+	}
+
+	var name string
+	var t uint64
+
+	os := make([]Object, n)
+	for i:=0; i<int(n); i++ {
+		t, err = ReadUint(r)
+		if err != nil {
+			return
+		}
+		name, err = ReadString(r)
+		if err != nil {
+			return
+		}
+
+		os[i] = Object{T:Type(uint8(t)), Name:name}
+	}
+	s = (*Schema)(&os)
+	return
+}
+
 /* MakeSchema makes a Schema out of a []string and []interface{}.
 The 'names' and 'types' slices *must* be the same length.
 Supported interface{} values are:

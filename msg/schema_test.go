@@ -72,6 +72,33 @@ func TestMakeSchema(t *testing.T) {
 	}
 }
 
+func TestReadWriteSchema(t *testing.T) {
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5, 6, 18, 200, 100, 5}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buf := bytes.NewBuffer(nil)
+	s.SerializeTo(buf)
+
+	snew, err := ReadSchema(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(snew, s) {
+		t.Errorf("Expected %v; got %v")
+	}
+}
+
 func TestEncode(t *testing.T) {
 	names := []string{"float", "int", "uint", "string", "bin"}
 	values := make([]interface{}, len(names))
