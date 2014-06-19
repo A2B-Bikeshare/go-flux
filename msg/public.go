@@ -1,6 +1,7 @@
 package msg
 
-// PackExt represents a MessagePack extension, and has type msg.Ext
+// PackExt represents a MessagePack extension, and has msg.Type = msg.Ext.
+// A messagepack extension is simply a tuple of an 8-bit type identifier with arbitary binary data.
 type PackExt struct {
 	// Type is an 8-bit signed integer. The MessagePack standard dictates that 0 through 127
 	// are permitted, while negative values are reserved for future use.
@@ -11,14 +12,15 @@ type PackExt struct {
 
 /* Write takes an object and writes it to a Writer
 
- Supported type are:
- - float64 (msg.Float)
- - bool (msg.Bool)
- - int64 (msg.Int)
- - uint64 (msg.Uint)
- - string (msg.String)
- - []byte (msg.Bin)
- - *msg.PackExt (msg.Ext) - a messagepack extension type
+Supported type-Type tuples are:
+
+ - float64 - msg.Float
+ - bool - msg.Bool
+ - int64 - msg.Int
+ - uint64 - msg.Uint
+ - string - msg.String
+ - []byte - msg.Bin
+ - *msg.PackExt - msg.Ext (must be non-nil, otherwise panic)
 
 Each type will be compacted on writing if it
 does not require all of its bits to represent itself.
@@ -81,40 +83,34 @@ func WriteInterface(w Writer, v interface{}, t Type) error {
 	}
 }
 
-func WriteFloat(w Writer, f float64) {
-	writeFloat(w, f)
-}
+//WriteFloat writes a float to a msg.Writer
+func WriteFloat(w Writer, f float64) { writeFloat(w, f) }
 
-func WriteBool(w Writer, b bool) {
-	writeBool(w, b)
-}
+//WriteBool writes a bool to a msg.Writer
+func WriteBool(w Writer, b bool) { writeBool(w, b) }
 
-func WriteInt(w Writer, i int64) {
-	writeInt(w, i)
-}
+//WriteInt writes an int to a msg.Writer
+func WriteInt(w Writer, i int64) { writeInt(w, i) }
 
-func WriteUint(w Writer, u uint64) {
-	writeUint(w, u)
-}
+//WriteUint writes a uint to a msg.Writer
+func WriteUint(w Writer, u uint64) { writeUint(w, u) }
 
-func WriteString(w Writer, s string) {
-	writeString(w, s)
-}
+//WriteString writes a string to a msg.Writer
+func WriteString(w Writer, s string) { writeString(w, s) }
 
-func WriteBin(w Writer, b []byte) {
-	writeBin(w, b)
-}
+//WriteBin writes an arbitrary binary to a msg.Writer
+func WriteBin(w Writer, b []byte) { writeBin(w, b) }
 
-func WriteExt(w Writer, etype int8, data []byte) {
-	writeExt(w, etype, data)
-}
+//WriteExt writes a messagepack 'extension' (tuple of type, data) to a msg.Writer
+func WriteExt(w Writer, etype int8, data []byte) { writeExt(w, etype, data) }
 
 // ReadXxxx() methods try to read values
-// from a msg.Reader into a pointer-to-type.
+// from a msg.Reader into a value.
 // If the reader reads a leading tag that does not
 // translate to the ReadXxxx() method called, it
 // unreads the leading byte so that another
-// ReadXxxx() method can be attempted.
+// ReadXxxx() method can be attempted and returns ErrBadTag.
+//
 // ReadFloat tries to read into a float64.
 func ReadFloat(r Reader) (f float64, err error) {
 	f, err = readFloat(r)
@@ -137,7 +133,7 @@ func ReadInt(r Reader) (i int64, err error) {
 	return
 }
 
-// ReadUint tries to read into a uint64
+// ReadUint tries to read into a uint64.
 func ReadUint(r Reader) (u uint64, err error) {
 	u, err = readUint(r)
 	if err != nil {
@@ -148,7 +144,7 @@ func ReadUint(r Reader) (u uint64, err error) {
 	return
 }
 
-// ReadString tries to read into a string
+// ReadString tries to read into a string.
 func ReadString(r Reader) (s string, err error) {
 	s, err = readString(r)
 	if err != nil {
@@ -159,7 +155,7 @@ func ReadString(r Reader) (s string, err error) {
 	return
 }
 
-// ReadBool tries to read into a bool
+// ReadBool tries to read into a bool.
 func ReadBool(r Reader) (b bool, err error) {
 	b, err = readBool(r)
 	if err != nil {
@@ -170,9 +166,10 @@ func ReadBool(r Reader) (b bool, err error) {
 	return
 }
 
-// ReadBin tries to read into a byte slice
-// 'b' is used for buffering in order to avoid allocations,
-// but it can safely be nil
+// ReadBin tries to read into a byte slice.
+// The slice 'b' is used for buffering in order to avoid allocations,
+// but it can safely be nil. Usually 'b' should be a slice
+// of an array on the stack.
 func ReadBin(r Reader, b []byte) (dat []byte, err error) {
 	dat, err = readBin(r, b)
 	if err != nil {
@@ -183,9 +180,11 @@ func ReadBin(r Reader, b []byte) (dat []byte, err error) {
 	return
 }
 
-// ReadExt tries to read into an PackExt
-// 'b' is used for buffering in order to avoid allocations,
-// but it can safely be nil
+// ReadExt tries to read into an PackExt.
+// The slice 'b' is used for buffering in order to avoid allocations,
+// but it can safely be nil. In many cases, 'b' should be
+// (part of) a [16]byte or [32]byte on the stack (or the
+// "typical" size of the binary that you expect to receive.)
 func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
 	dat, etype, err := readExt(r, b)
 	if err != nil {

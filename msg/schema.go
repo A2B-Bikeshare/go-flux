@@ -5,10 +5,9 @@ import (
 )
 
 var (
-	//ErrTypeNotSupported returns when creating a schema with an interface{} of unsupported type
-	ErrTypeNotSupported = errors.New("Type not supported as Schema type")
-	ErrIncorrectType    = errors.New("Incorrect mapping of Type to type")
-	ErrBadArgs          = errors.New("Bad arguments.")
+	ErrTypeNotSupported = errors.New("Type not supported as Schema type") // ErrTypeNotSupported returns when creating a schema with an interface{} of unsupported type
+	ErrIncorrectType    = errors.New("Incorrect mapping of Type to type") // ErrIncorrectType is returned when value.(type) doesn't match msg.Type
+	ErrBadArgs          = errors.New("Bad arguments.")                    // ErrBadArgs is returned when arguments are malformed.
 )
 
 //Schema represents an ordering of named objects
@@ -20,14 +19,20 @@ type Object struct {
 	Name string
 }
 
-/* MakeSchema makes a Schema out of a map[string]interface{}
+/* MakeSchema makes a Schema out of a []string and []interface{}.
+The 'names' and 'types' slices *must* be the same length.
 Supported interface{} values are:
-float64, float32
-uint8, uint16, uint32, uint64
-int8, int16, int32, int64
-bool
-string
-[]byte (binary) */
+
+ float64, float32
+ uint8, uint16, uint32, uint64
+ int8, int16, int32, int64
+ bool
+ string
+ []byte (binary)
+
+Note that even though MakeSchema accepts non-64-bit types, the types used in
+Encode() *must* be 64-bit (float64, int64, uint64), because the interface{} is type-asserted
+to those types internally. */
 func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	if len(names) != len(types) {
 		err = ErrBadArgs
@@ -124,7 +129,7 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	return nil
 }
 
-//Encode uses a schema to encode a slice-of-interface to a writer
+//Encode uses a schema to encode a slice-of-interface to a writer.
 func (s *Schema) Encode(a []interface{}, w Writer) (err error) {
 	for i, v := range a {
 		err = encode(v, (*s)[i], w)

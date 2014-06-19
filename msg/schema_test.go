@@ -218,3 +218,35 @@ func TestSchemaDecodetoMap(t *testing.T) {
 	}
 
 }
+
+func BenchmarkSchemaDecodeToMap(b *testing.B) {
+	b.ReportAllocs()
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(40)
+	s.Encode(values, buf)
+	b.SetBytes(int64(len(buf.Bytes())))
+	bts := buf.Bytes()
+	m := make(map[string]interface{})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = s.DecodeToMap(bytes.NewReader(bts), m)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+}
