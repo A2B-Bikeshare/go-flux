@@ -1,7 +1,6 @@
 package msg
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"unsafe"
@@ -164,7 +163,7 @@ func readUint(r Reader) (i uint64, err error) {
 }
 
 func readString(r Reader) (s string, err error) {
-	var bs [31]byte //for short strings (fixstr) - we can avoid allocating
+	var bs [31]byte //for short strings (fixstr) - we can avoid allocating a slice
 	var ns [4]byte  //for length
 	var bsl []byte  //slice for dynamic strings
 	var c byte      //leading byte
@@ -268,17 +267,24 @@ func readBin(r Reader, p []byte) (dat []byte, err error) {
 
 	}
 
-	buf := bytes.NewBuffer(p)
-	buf.Reset()
-	_, err = io.CopyN(buf, r, int64(n))
-	dat = buf.Bytes()
+	//use p if possible
+	if p != nil {
+		if cap(p) >= int(n) {
+			p = p[:n]
+			_, err = r.Read(p)
+			dat = p
+			return
+		}
+	}
+	dat = make([]byte, n, n)
+	_, err = r.Read(dat)
 	return
 
 }
 
 //b is used for buffering to avoid unnecessary allocations.
 func readExt(r Reader, b []byte) (dat []byte, etype int8, err error) {
-	var bs [16]byte
+	var bs [16]byte //for fixext
 
 	var c byte //leading byte
 
@@ -309,9 +315,6 @@ func readExt(r Reader, b []byte) (dat []byte, etype int8, err error) {
 		dat = bs[:16]
 		return
 	}
-
-	buf := bytes.NewBuffer(b)
-	buf.Reset()
 
 	var n uint32   //length
 	var ns [4]byte //length bytes
@@ -352,14 +355,18 @@ func readExt(r Reader, b []byte) (dat []byte, etype int8, err error) {
 	}
 	etype = int8(c)
 
-	//CopyN will cause no allocations if NewBuffer() used a sufficiently large starting slice
-	_, err = io.CopyN(buf, r, int64(n))
-	if err != nil {
-		return
+	if b != nil {
+		if cap(b) > int(n) {
+			b = b[:n]
+			_, err = r.Read(b)
+			dat = b
+			return
+		}
 	}
-	dat = buf.Bytes()
-
+	dat = make([]byte, n, n)
+	_, err = r.Read(dat)
 	return
+
 }
 
 func readfixExt(r Reader, dat []byte, size uint8) (etype int8, err error) {

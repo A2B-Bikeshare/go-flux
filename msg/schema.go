@@ -8,6 +8,7 @@ var (
 	ErrTypeNotSupported = errors.New("Type not supported as Schema type") // ErrTypeNotSupported returns when creating a schema with an interface{} of unsupported type
 	ErrIncorrectType    = errors.New("Incorrect mapping of Type to type") // ErrIncorrectType is returned when value.(type) doesn't match msg.Type
 	ErrBadArgs          = errors.New("Bad arguments.")                    // ErrBadArgs is returned when arguments are malformed.
+	ErrShortSlice       = errors.New("Slice too short.")                  //ErrShortSlice is returned when an argument slice was too short.
 )
 
 //Schema represents an ordering of named objects
@@ -63,15 +64,89 @@ func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	return
 }
 
+// DecodeToSlice reads values from a msg.Reader into a []interface{}, provided that
+// the provided slice is long enough. (If not, ErrShortSlice is returned.)
+// DecodeToSlice is a higher-performance alternative to DecodeToMap.
+func (s *Schema) DecodeToSlice(r Reader, v []interface{}) error {
+	if len(v) < len(*s) {
+		return ErrShortSlice
+	}
+	var t Type         //type
+	var ns interface{} //value
+	var err error      //error
+
+	for i, o := range *s {
+		t = o.T
+		switch t {
+
+		case String:
+			ns, err = readString(r)
+			if err != nil {
+				return err
+			}
+			v[i] = ns
+			continue
+
+		case Int:
+			ns, err = readInt(r)
+			if err != nil {
+				return err
+			}
+			v[i] = ns
+			continue
+
+		case Uint:
+			ns, err = readUint(r)
+			if err != nil {
+				return err
+			}
+			v[i] = ns
+			continue
+
+		case Float:
+			ns, err = readFloat(r)
+			if err != nil {
+				return err
+			}
+			v[i] = ns
+			continue
+
+		case Bin:
+			var dat []byte
+			var bs [32]byte //try to avoid allocations for small bins
+			dat, err = readBin(r, bs[:32])
+			if err != nil {
+				return err
+			}
+			v[i] = dat
+			continue
+
+		case Ext:
+			var dat []byte
+			var etype int8
+			var bs [32]byte //try to avoid allocations for small exts
+			dat, etype, err = readExt(r, bs[:32])
+			if err != nil {
+				return err
+			}
+			v[i] = &PackExt{Type: etype, Data: dat}
+			continue
+
+		default:
+			err = ErrIncorrectType
+			return err
+
+		}
+	}
+	return nil
+}
+
 // DecodeToMap uses a schema to decode a fluxmsg stream into a map[string]interface{}.
 // The map keys are the Name fields of each msg.Object in the msg.Schema.
 func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	var t Type
 	var n string
 	var ns interface{}
-	var bs [16]byte
-	var etype int8
-	var dat []byte
 	var err error
 	for _, o := range *s {
 		t = o.T
@@ -107,14 +182,19 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 			m[n] = ns
 
 		case Bin:
-			dat, err = readBin(r, bs[:16])
+			var bs [32]byte
+			var dat []byte
+			dat, err = readBin(r, bs[:32])
 			if err != nil {
 				return err
 			}
 			m[n] = dat
 
 		case Ext:
-			dat, etype, err = readExt(r, bs[:16])
+			var bs [32]byte
+			var dat []byte
+			var etype int8
+			dat, etype, err = readExt(r, bs[:32])
 			if err != nil {
 				return err
 			}

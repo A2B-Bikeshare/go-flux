@@ -138,6 +138,39 @@ func BenchmarkEncode(b *testing.B) {
 	}
 }
 
+func TestSchemaDecodeToSlice(t *testing.T) {
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.5898493027815032478)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(40)
+	s.Encode(values, buf)
+
+	outslice := make([]interface{}, len(names))
+
+	err = s.DecodeToSlice(buf, outslice)
+
+	for i, out := range outslice {
+		//float64 does not evaluate to precisely the same value
+		if _, ok := out.(float64); ok {
+			continue
+		}
+		if !reflect.DeepEqual(values[i], out) {
+			t.Errorf("Test case %d: Got %v, expected %v.", i, out, values[i])
+		}
+	}
+
+}
+
 func TestSchemaDecodetoMap(t *testing.T) {
 	names := []string{"float", "int", "uint", "string", "bin"}
 	values := make([]interface{}, len(names))
@@ -227,7 +260,7 @@ func BenchmarkSchemaDecodeToMap(b *testing.B) {
 	values[1] = int64(-2000)
 	values[2] = uint64(586)
 	values[3] = "here's a string"
-	values[4] = []byte{3, 4, 5}
+	values[4] = []byte{3, 4, 5, 8}
 
 	s, err := MakeSchema(names, values)
 	if err != nil {
@@ -243,10 +276,35 @@ func BenchmarkSchemaDecodeToMap(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = s.DecodeToMap(bytes.NewReader(bts), m)
-		if err != nil {
-			b.Fatal(err)
-		}
+		_ = s.DecodeToMap(bytes.NewReader(bts), m)
 	}
 
+}
+
+func BenchmarkSchemaDecodeToSlice(b *testing.B) {
+	b.ReportAllocs()
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5, 8}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(40)
+	s.Encode(values, buf)
+	b.SetBytes(int64(len(buf.Bytes())))
+	bts := buf.Bytes()
+	m := make([]interface{}, len(names))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = s.DecodeToSlice(bytes.NewReader(bts), m)
+	}
 }

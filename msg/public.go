@@ -169,7 +169,10 @@ func ReadBool(r Reader) (b bool, err error) {
 // ReadBin tries to read into a byte slice.
 // The slice 'b' is used for buffering in order to avoid allocations,
 // but it can safely be nil. Usually 'b' should be a slice
-// of an array on the stack.
+// of an array on the stack. ReadBin may use the entire underlying capacity of 'b',
+// and 'b' and 'dat' may share memory. (In other words, data will be read into 'b'
+// if it is large enough, in which case 'dat' will be a sub-slice of 'b'. If cap(dat)=cap(b),
+// then they point to the same underlying array.)
 func ReadBin(r Reader, b []byte) (dat []byte, err error) {
 	dat, err = readBin(r, b)
 	if err != nil {
@@ -181,10 +184,10 @@ func ReadBin(r Reader, b []byte) (dat []byte, err error) {
 }
 
 // ReadExt tries to read into an PackExt.
-// The slice 'b' is used for buffering in order to avoid allocations,
+// The slice 'b' is used in order to avoid allocations,
 // but it can safely be nil. In many cases, 'b' should be
-// (part of) a [16]byte or [32]byte on the stack (or the
-// "typical" size of the binary that you expect to receive.)
+// a slice on the stack that is re-used. 'b' and p.Data may share
+// memory. ReadExt may use the entire underlying capacity of 'b'. See ReadBin.
 func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
 	dat, etype, err := readExt(r, b)
 	if err != nil {
