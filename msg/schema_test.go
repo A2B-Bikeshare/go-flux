@@ -99,7 +99,7 @@ func TestReadWriteSchema(t *testing.T) {
 	}
 }
 
-func TestEncode(t *testing.T) {
+func TestEncodeSlice(t *testing.T) {
 	names := []string{"float", "int", "uint", "string", "bin"}
 	values := make([]interface{}, len(names))
 	values[0] = float64(3.589)
@@ -118,7 +118,7 @@ func TestEncode(t *testing.T) {
 	vbuf.Grow(40)
 
 	//use encoder
-	err = s.Encode(values, buf)
+	err = s.EncodeSlice(values, buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestEncode(t *testing.T) {
 
 }
 
-func BenchmarkEncode(b *testing.B) {
+func BenchmarkEncodeSlice(b *testing.B) {
 	b.ReportAllocs()
 	names := []string{"float", "int", "uint", "string", "bin"}
 	values := make([]interface{}, len(names))
@@ -152,14 +152,14 @@ func BenchmarkEncode(b *testing.B) {
 	}
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 	nbytes := int64(len(buf.Bytes()))
 	b.SetBytes(nbytes)
 	buf.Reset()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Encode(values, buf)
+		s.EncodeSlice(values, buf)
 		buf.Reset()
 	}
 }
@@ -179,7 +179,7 @@ func TestSchemaDecodeToSlice(t *testing.T) {
 	}
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 
 	outslice := make([]interface{}, len(names))
 
@@ -213,7 +213,7 @@ func TestSchemaDecodetoMap(t *testing.T) {
 
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 
 	m := make(map[string]interface{})
 
@@ -295,7 +295,7 @@ func BenchmarkSchemaDecodeToMap(b *testing.B) {
 
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 	b.SetBytes(int64(len(buf.Bytes())))
 	bts := buf.Bytes()
 	m := make(map[string]interface{})
@@ -324,7 +324,7 @@ func BenchmarkSchemaDecodeToSlice(b *testing.B) {
 
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(40)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 	b.SetBytes(int64(len(buf.Bytes())))
 	bts := buf.Bytes()
 	m := make([]interface{}, len(names))
@@ -351,7 +351,7 @@ func BenchmarkSchemaDecodeToSliceZeroCopy(b *testing.B) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	s.Encode(values, buf)
+	s.EncodeSlice(values, buf)
 	b.SetBytes(int64(len(buf.Bytes())))
 	bts := buf.Bytes()
 

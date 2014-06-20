@@ -11,6 +11,17 @@ var (
 	ErrShortSlice       = errors.New("Slice too short.")                  //ErrShortSlice is returned when an argument slice was too short.
 )
 
+// StructMessage is the interface for types
+// that know how to encode themselves to msg.Writers
+// and decode themselves from msg.Readers.
+// (These should essentially always be pointer-to-struct
+// methods, or types with pointer semantics like maps and
+// slices.)
+type StructMessage interface {
+	Encode(w Writer) error
+	Decode(r Reader) error
+}
+
 //Schema represents an ordering of named objects
 type Schema []Object
 
@@ -330,7 +341,7 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 }
 
 //Encode uses a schema to encode a slice-of-interface to a writer.
-func (s *Schema) Encode(a []interface{}, w Writer) (err error) {
+func (s *Schema) EncodeSlice(a []interface{}, w Writer) (err error) {
 	for i, v := range a {
 		err = encode(v, (*s)[i], w)
 		if err != nil {

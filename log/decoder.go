@@ -1,123 +1,55 @@
 package log
 
 import (
-	"bufio"
-	"bytes"
-	"errors"
-	capn "github.com/glycerine/go-capnproto"
-	"io"
-	"strconv"
+	"github.com/A2B-Bikeshare/go-flux/msg"
+	"time"
 )
 
-var (
-	//ErrCapEntryMalformed is returned when the lengths of 'points' and 'columns' are unequal
-	ErrCapEntryMalformed = errors.New("Malformed CapEntry.")
-)
-
-//Decoder must be satisfied for each database type
-//UseDecoder takes a decoder and writes a prefix, a body with 'Decode()', and then a suffix
-type Decoder interface {
-	//Decode marshals some form of 's' into 'w'
-	Decode(s CapEntry, w io.Writer) error
-	//Prefix goes before an entry, e.g. '[' (for InfluxDB)
-	Prefix() []byte
-	//Suffix follows an entry, e.g. ']' (for InfluxDB)
-	Suffix() []byte
+// Entry is a simple timestamped leveled message.
+// It satisfies the msg.StructMessage interface.
+type Entry struct {
+	stamp   uint64
+	Level   int64
+	Message string
 }
 
-// ElasticSearchDecode writes the Elasticsearch-compatible
-// serialized JSON form of a CapEntry into a writer
-func ElasticSearchDecode(s CapEntry, w io.Writer) error {
-	return s.WriteESJSON(w)
+// Timestamp returns the timestamp of an entry,
+// or time.Now() if it hasn't been stamped yet.
+func (e *Entry) Timestamp() uint64 {
+	if e.stamp == 0 {
+		return uint64(time.Now().Unix())
+	}
+	return e.stamp
 }
 
-// InfluxDBDecode writes the InfluxDB-compatible
-// serialized JSON form of a CapEntry into a writer
-func InfluxDBDecode(s CapEntry, w io.Writer) error {
-	return s.WriteJSON(w)
+// Stamp fixes the timestamp on an entry to the moment
+// Stamp() is called.
+func (e *Entry) Stamp() {
+	e.stamp = uint64(time.Now().Unix())
 }
 
-// UseDecoder uses a Decoder to write a bytewise Capnproto entry
-// to a buffer.
-func UseDecoder(d Decoder, data []byte, b *bytes.Buffer) (err error) {
-	if b == nil {
-		b = getBuffer()
-	}
-
-	var seg *capn.Segment
-	seg, _, err = capn.ReadFromMemoryZeroCopy(data)
-	if err != nil {
-		return
-	}
-	entry := ReadRootCapEntry(seg)
-	_, err = b.Write(d.Prefix())
-	if err != nil {
-		return
-	}
-	err = d.Decode(entry, b)
-	if err != nil {
-		return
-	}
-	_, err = b.Write(d.Suffix())
-	return
+// Encode writes an entry with a timestamp of time.Now().Unix()
+func (e *Entry) Encode(w msg.Writer) error {
+	msg.WriteUint(w, e.Timestamp())
+	msg.WriteInt(w, e.Level)
+	msg.WriteString(w, e.Message)
+	return nil
 }
 
-//WriteESJSON writes elasticsearch-compatible JSON for the _bulk API
-func (s CapEntry) WriteESJSON(w io.Writer) error {
-	b := bufio.NewWriter(w)
-	var err error
-	err = b.WriteByte('{')
+// Decode reads an Entry from a msg.Reader
+func (e *Entry) Decode(r msg.Reader) error {
+	stamp, err := msg.ReadUint(r)
 	if err != nil {
 		return err
 	}
-
-	//Write "name:"
-	_, err = b.WriteString("\"name\":")
+	level, err := msg.ReadInt(r)
 	if err != nil {
 		return err
 	}
-
-	//Write "[name]"
-	_, err = b.Write(strconv.AppendQuote([]byte{}, s.Name()))
+	msg, err := msg.ReadString(r)
 	if err != nil {
 		return err
 	}
-	err = b.WriteByte(',')
-	if err != nil {
-		return err
-	}
-
-	//Write all columns/points
-	pts := s.Points().ToArray()
-	cols := s.Columns().ToArray()
-	if len(pts) != len(cols) {
-		return ErrCapEntryMalformed
-	}
-	for i, colname := range cols {
-		_, err = b.Write(strconv.AppendQuote([]byte{}, colname))
-		if err != nil {
-			return err
-		}
-		err = b.WriteByte(':')
-		if err != nil {
-			return err
-		}
-		err = pts[i].WriteNoBufferJSON(b)
-		if err != nil {
-			return err
-		}
-		if i < len(cols)-1 {
-			err = b.WriteByte(',')
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	err = b.WriteByte('}')
-	if err != nil {
-		return err
-	}
-	err = b.Flush()
-	return err
+	e.stamp, e.Level, e.Message = stamp, level, msg
+	return nil
 }
