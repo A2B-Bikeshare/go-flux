@@ -17,7 +17,7 @@ func rint16(p []byte) int64 {
 }
 
 func rint32(p []byte) int64 {
-	return int64(int32(p[3]) | (int32(p[2]) << 8) | (int32(p[1]) << 16) | (int32(p[0]) << 24))
+	return int64(int32(int32(p[3]) | (int32(p[2]) << 8) | (int32(p[1]) << 16) | (int32(p[0]) << 24)))
 }
 
 func rint64(p []byte) int64 {
@@ -44,7 +44,7 @@ func ruint32(p []byte) uint64 {
 }
 
 func ruint64(p []byte) uint64 {
-	return uint64(uint64(p[7]) |
+	return (uint64(p[7]) |
 		(uint64(p[6]) << 8) |
 		(uint64(p[5]) << 16) |
 		(uint64(p[4]) << 24) |
@@ -105,7 +105,7 @@ func readUintBytes(p []byte) (i uint64, n int, err error) {
 			err = ErrShortBytes
 			return
 		}
-		i = ruint32(p[1:])
+		i = ruint64(p[1:])
 		n += 8
 		return
 
@@ -140,7 +140,7 @@ func readIntBytes(p []byte) (i int64, n int, err error) {
 	var c byte
 	n = 0
 	np := len(p)
-	if n == 0 {
+	if np == 0 {
 		err = ErrShortBytes
 		return
 	}
@@ -188,7 +188,7 @@ func readIntBytes(p []byte) (i int64, n int, err error) {
 			err = ErrShortBytes
 			return
 		}
-		i = rint16(p[1:])
+		i = rint64(p[1:])
 		n += 8
 		return
 	default:
