@@ -1,6 +1,9 @@
 package log
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/A2B-Bikeshare/go-flux/msg"
+)
 
 //LogLevel represents one of 'debug/info/warn/error/fatal'
 type LogLevel int64
@@ -12,8 +15,6 @@ const (
 	ERROR LogLevel = iota //Error log level
 	FATAL LogLevel = iota //Fatal log level
 )
-
-type Entry map[string]interface{}
 
 //Log at the 'info' level
 func (l *Logger) Info(v string)                            { l.doMsg(INFO, v) }
@@ -38,5 +39,8 @@ func (l *Logger) Fatalf(format string, args ...interface{}) { l.doMsg(FATAL, fmt
 //Log at an arbitrary level
 func (l *Logger) Log(level LogLevel, v string) { l.doMsg(level, v) }
 
-//Log with arbitrary information
-func (l *Logger) LogEntry(e Entry) error { return l.doEntry(e) }
+func (l *Logger) SendStruct(m msg.StructMessage) {
+	go func(l *Logger, m msg.StructMessage) {
+		l.list <- m
+	}(l, m)
+}
