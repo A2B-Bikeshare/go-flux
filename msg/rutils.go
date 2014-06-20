@@ -317,3 +317,130 @@ func readStringZeroCopy(p []byte) (s string, n int, err error) {
 	n += strlen
 	return
 }
+
+func readBinZeroCopy(p []byte) (dat []byte, n int, err error) {
+	n = 0
+	var c byte
+	var binlen int
+	np := len(p)
+	if np < 2 {
+		err = ErrShortBytes
+		return
+	}
+
+	c = p[0]
+	n++
+
+	switch c {
+	case mbin8:
+		binlen = int(int8(p[1]))
+		n++
+	case mbin16:
+		if np < 3 {
+			err = ErrShortBytes
+			return
+		}
+		binlen = int(uint16(p[2]) | (uint16(p[1]) << 8))
+		n += 2
+	case mbin32:
+		if np < 5 {
+			err = ErrShortBytes
+			return
+		}
+		binlen = int(uint32(p[4]) | (uint32(p[3]) << 8) | (uint32(p[2]) << 16) | (uint32(p[1]) << 24))
+		n += 4
+	default:
+		err = ErrShortBytes
+		return
+	}
+	if np < n+binlen {
+		err = ErrShortBytes
+		return
+	}
+	dat = p[n : n+binlen]
+	return
+}
+
+func readExtZeroCopy(p []byte) (dat []byte, etype int8, n int, err error) {
+	np := len(p)
+	var c byte
+	n = 0
+	if np < 2 {
+		err = ErrShortBytes
+		return
+	}
+
+	c = p[0]
+	n++
+
+	//fixed cases
+	switch c {
+	case mfixext1:
+		if np < 3 {
+			err = ErrShortBytes
+			return
+		}
+		etype = int8(p[1])
+		dat = p[2:3]
+		n += 2
+		return
+	case mfixext2:
+		if np < 4 {
+			err = ErrShortBytes
+			return
+		}
+		etype = int8(p[1])
+		dat = p[2:4]
+		n += 3
+		return
+	case mfixext4:
+		if np < 6 {
+			err = ErrShortBytes
+			return
+		}
+		etype = int8(p[1])
+		dat = p[2:6]
+		n += 5
+		return
+	case mfixext8:
+		if np < 10 {
+			err = ErrShortBytes
+			return
+		}
+		etype = int8(p[1])
+		dat = p[2:10]
+		n += 9
+		return
+
+	case mfixext16:
+		if np < 18 {
+			err = ErrShortBytes
+			return
+		}
+		etype = int8(p[1])
+		dat = p[2:18]
+		n += 17
+		return
+	}
+
+	var datlen int
+	//variable cases
+	switch c {
+	case mext8:
+		datlen = int(uint32(p[1]))
+		n++
+	case mext16:
+		datlen = int(uint32(p[2]) | (uint32(p[1]) << 8))
+		n += 2
+	case mext32:
+		datlen = int(uint32(p[4]) | (uint32(p[3]) << 8) | (uint32(p[2]) << 16) | (uint32(p[1]) << 24))
+		n += 4
+	default:
+		err = ErrShortBytes
+		return
+	}
+	etype = int8(p[n])
+	n++
+	dat = p[n : n+datlen]
+	return
+}
