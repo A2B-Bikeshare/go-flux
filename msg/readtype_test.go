@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func TestReadBinZeroCopy(t *testing.T) {
+	testbytes := []byte{1, 8, 3, 48, 201, 191, 3, 9}
+	buf := bytes.NewBuffer(nil)
+	writeBin(buf, testbytes)
+
+	dat, n, err := readBinZeroCopy(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n != len(buf.Bytes()) {
+		t.Errorf("Supposed to read %d bytes; got %d bytes", len(buf.Bytes()), n)
+	}
+
+	if !reflect.DeepEqual(dat, testbytes) {
+		t.Errorf("Bytes not equal: %v != %v", dat, testbytes)
+	}
+
+}
+
 func TestReadBool(t *testing.T) {
 	//test cases
 	testvals := []bool{false, true}
@@ -255,6 +275,43 @@ func TestReadFloat(t *testing.T) {
 		}
 		if x != s {
 			t.Errorf("Got %v; expected %v", s, x)
+		}
+	}
+}
+
+func TestReadFloatBytes(t *testing.T) {
+	var smallpos float64 = 3.1                                //float32
+	var smallneg float64 = -100 * math.SmallestNonzeroFloat32 //float32
+	var largepos float64 = 4 * math.MaxFloat32                //float64
+	var largeneg float64 = -0.1 * math.SmallestNonzeroFloat32 //float64
+
+	testvals := []float64{smallpos, smallneg, largepos, largeneg}
+	issmall := []bool{true, true, false, false}
+
+	for i, x := range testvals {
+		buf := bytes.NewBuffer(nil)
+
+		writeFloat(buf, x)
+
+		f, n, err := readFloatBytes(buf.Bytes())
+
+		if err != nil {
+			t.Errorf("Test case %d: Error: %s", i, err.Error())
+		}
+
+		if n != len(buf.Bytes()) {
+			t.Errorf("Test case %d: Read %d bytes; should have read %d.", n, len(buf.Bytes()))
+		}
+
+		if issmall[i] {
+			fg := float32(x)
+			if fg != float32(f) {
+				t.Errorf("Test case %d: %v != %v", i, fg, float32(f))
+			}
+		} else {
+			if x != f {
+				t.Errorf("Test case %d: %v != %v", i, x, f)
+			}
 		}
 	}
 }

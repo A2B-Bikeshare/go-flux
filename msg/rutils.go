@@ -225,14 +225,14 @@ func readFloatBytes(p []byte) (f float64, n int, err error) {
 			err = ErrShortBytes
 			return
 		}
-		fg := uint64(uint64(p[7]) |
-			(uint64(p[6]) << 8) |
-			(uint64(p[5]) << 16) |
-			(uint64(p[4]) << 24) |
-			(uint64(p[3]) << 32) |
-			(uint64(p[2]) << 40) |
-			(uint64(p[1]) << 48) |
-			(uint64(p[0]) << 56))
+		fg := uint64(uint64(p[8]) |
+			(uint64(p[7]) << 8) |
+			(uint64(p[6]) << 16) |
+			(uint64(p[5]) << 24) |
+			(uint64(p[4]) << 32) |
+			(uint64(p[3]) << 40) |
+			(uint64(p[2]) << 48) |
+			(uint64(p[1]) << 56))
 		f = *(*float64)(unsafe.Pointer(&fg))
 		n += 8
 		return
@@ -333,7 +333,7 @@ func readBinZeroCopy(p []byte) (dat []byte, n int, err error) {
 
 	switch c {
 	case mbin8:
-		binlen = int(int8(p[1]))
+		binlen = int(uint8(p[1]))
 		n++
 	case mbin16:
 		if np < 3 {
@@ -358,6 +358,7 @@ func readBinZeroCopy(p []byte) (dat []byte, n int, err error) {
 		return
 	}
 	dat = p[n : n+binlen]
+	n += binlen
 	return
 }
 
