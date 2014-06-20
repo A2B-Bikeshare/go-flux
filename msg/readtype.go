@@ -8,7 +8,8 @@ import (
 
 var (
 	//ErrBadTag blah blah blah
-	ErrBadTag = errors.New("Bad tag.")
+	ErrBadTag     = errors.New("Bad tag.")
+	ErrShortBytes = errors.New("Byte array is too short for type.")
 )
 
 //Reader must implement io.Reader, io.ByteReader, and be able to unread a byte.
