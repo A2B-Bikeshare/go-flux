@@ -181,9 +181,18 @@ func (s *Schema) DecodeToSlice(r Reader, v []interface{}) error {
 	return nil
 }
 
-//
+// DecodeToSliceZeroCopy reads the data from 'p' directly into values in 'v'.
+// The length of 'v' must be greater than or equal to the length of *s. Also,
+// the values in v point to data in 'p', so those values are only "safe" as long
+// as 'p' remains untouched. This is both "dangerous" and highly performant. Use
+// at your own risk.
 func (s *Schema) DecodeToSliceZeroCopy(p []byte, v []interface{}) error {
 	var nn int = 0 //total bytewise progress
+
+	//check for sanity
+	if len(v) < len(*s) {
+		return ErrShortSlice
+	}
 
 	for i, o := range *s {
 		switch o.T {
