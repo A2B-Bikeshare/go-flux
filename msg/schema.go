@@ -27,7 +27,7 @@ func (s *Schema) SerializeTo(w Writer) {
 	WriteInt(w, int64(n))
 
 	//write objects
-	for _,o := range (*s) {
+	for _, o := range *s {
 		WriteUint(w, uint64(o.T))
 		WriteString(w, o.Name)
 	}
@@ -44,7 +44,7 @@ func ReadSchema(r Reader) (s *Schema, err error) {
 	var t uint64
 
 	os := make([]Object, n)
-	for i:=0; i<int(n); i++ {
+	for i := 0; i < int(n); i++ {
 		t, err = ReadUint(r)
 		if err != nil {
 			return
@@ -54,7 +54,7 @@ func ReadSchema(r Reader) (s *Schema, err error) {
 			return
 		}
 
-		os[i] = Object{T:Type(uint8(t)), Name:name}
+		os[i] = Object{T: Type(uint8(t)), Name: name}
 	}
 	s = (*Schema)(&os)
 	return
@@ -179,6 +179,77 @@ func (s *Schema) DecodeToSlice(r Reader, v []interface{}) error {
 		}
 	}
 	return nil
+}
+
+//
+func (s *Schema) DecodeToSliceZeroCopy(p []byte, v []interface{}) error {
+	var nn int = 0 //total bytewise progress
+
+	for i, o := range *s {
+		switch o.T {
+		case String:
+			s, n, err := readStringZeroCopy(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = s
+			nn += n
+
+		case Int:
+			in, n, err := readIntBytes(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = in
+			nn += n
+
+		case Uint:
+			uin, n, err := readUintBytes(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = uin
+			nn += n
+
+		case Float:
+			f, n, err := readFloatBytes(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = f
+			nn += n
+
+		case Bool:
+			b, n, err := readBoolBytes(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = b
+			nn += n
+
+		case Bin:
+			dat, n, err := readBinZeroCopy(p[nn:])
+			if err != nil {
+				return err
+			}
+			v[i] = dat
+			nn += n
+
+		case Ext:
+			dat, etype, n, err := readExtZeroCopy(p[nn:])
+			if err != nil {
+				return err
+			}
+			p := &PackExt{EType: etype, Data: dat}
+			v[i] = p
+			nn += n
+
+		default:
+			return ErrIncorrectType
+		}
+
+	}
+	return nil //schema is nil...
 }
 
 // DecodeToMap uses a schema to decode a fluxmsg stream into a map[string]interface{}.

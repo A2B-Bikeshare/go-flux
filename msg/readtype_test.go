@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestReadExtZeroCopy(t *testing.T) {
+	testbytes := []byte{1, 2, 3, 4}
+	var etype int8 = 4
+
+	buf := bytes.NewBuffer(nil)
+	writeExt(buf, etype, testbytes)
+
+	dat, netype, n, err := readExtZeroCopy(buf.Bytes())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n != len(buf.Bytes()) {
+		t.Errorf("Read %d bytes; should have read %d", n, len(buf.Bytes()))
+	}
+
+	if netype != etype {
+		t.Errorf("Type %d != type %d", etype, netype)
+	}
+
+	if !reflect.DeepEqual(testbytes, dat) {
+		t.Errorf("Bytes %v != bytes %v", testbytes, dat)
+	}
+
+}
+
 func TestReadBinZeroCopy(t *testing.T) {
 	testbytes := []byte{1, 8, 3, 48, 201, 191, 3, 9}
 	buf := bytes.NewBuffer(nil)
