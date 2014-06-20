@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-const (
-	//MAXBUFFERLENGTH determines max sustained memory usage per logger.
-	//Each logger uses two message buffers.
-	//Each buffer is allowed to grow unbounded, but the buffer is deleted and re-allocated
-	//to a smaller one if it is greater than MAXBUFFERLENGTH.
-	MAXBUFFERLENGTH = 2000
-)
-
 var (
 	defaultConfig *nsq.Config
 	bufferPool    *sync.Pool
@@ -27,26 +19,9 @@ var (
 func init() {
 	defaultConfig = nsq.NewConfig()
 	defaultConfig.Set("verbose", false)
-	defaultConfig.Set("snappy", true)
 	defaultConfig.Set("max_in_flight", 100)
 	bufferPool = new(sync.Pool)
 	bufferPool.New = func() interface{} { return bytes.NewBuffer(nil) }
-}
-
-/*	////////////////
-	POOL OPERATIONS
-	///////////////			*/
-func getBuffer() *bytes.Buffer {
-	buf, ok := bufferPool.Get().(*bytes.Buffer)
-	if !ok {
-		return bytes.NewBuffer(nil)
-	}
-	buf.Truncate(0)
-	return buf
-}
-
-func putBuffer(buf *bytes.Buffer) {
-	bufferPool.Put(buf)
 }
 
 /*  //////////////
@@ -102,8 +77,10 @@ func publoop(l *Logger) {
 	dones := make(chan *nsq.ProducerTransaction)
 	var trans *nsq.ProducerTransaction
 	var err error
-	buf := getBuffer()
-	buf.Grow(64)
+	buf := bytes.NewBuffer(nil)
+	//pre-emptively allocate some space
+	buf.Grow(128)
+	//pop entry
 	for msg := range l.list {
 		//write message to buffer
 		err = msg.Encode(buf)
@@ -137,6 +114,7 @@ exit:
 	l.wg.Done()
 }
 
+// push entry onto stack
 func sendentry(e *Entry, l *Logger) {
 	l.list <- e
 }
@@ -148,8 +126,8 @@ func (l *Logger) doMsg(level LogLevel, message string) {
 	go sendentry(e, l)
 }
 
-//determine if logger is closed.
-//loggers cannot be restarted; you must call NewLogger()
+// IsClosed() returns the state of the logger.
+// The logger cannot be 're-opened'.
 func (l *Logger) IsClosed() (b bool) {
 	l.cguard.Lock()
 	if l.closed {
@@ -161,7 +139,7 @@ func (l *Logger) IsClosed() (b bool) {
 	return
 }
 
-// Close idepotently
+// Close (permanent)
 func (l *Logger) Close() {
 	l.cguard.Lock()
 	if l.closed {
