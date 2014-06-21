@@ -3,7 +3,6 @@
 package log
 
 import (
-	//"bytes"
 	"bytes"
 	"github.com/bitly/go-nsq"
 	"math/rand"
@@ -26,6 +25,7 @@ func getMsg() Msg {
 	return Msg{Level: LEVELS[n], Message: MSGS[n]}
 }
 
+//get n random messages
 func getMsgs(n int) []Msg {
 	var m Msg
 	out := make([]Msg, n)
@@ -38,12 +38,12 @@ func getMsgs(n int) []Msg {
 
 func logMsgs(l *Logger, msgs []Msg) {
 	for _, msg := range msgs {
-		time.Sleep(100 * time.Nanosecond)
 		l.Log(msg.Level, msg.Message)
 	}
 }
 
 func TestConnection(t *testing.T) {
+	t.Skip()
 	t.Log("Testing connection...")
 	conn := nsq.NewConn("localhost:4150", defaultConfig)
 	id, err := conn.Connect()
@@ -51,7 +51,7 @@ func TestConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(id)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	conn.Close()
 	t.Log("Success.")
 	return
@@ -75,15 +75,14 @@ func TestLogMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("Setting consumer HandlerFunc...")
-	bufs := make(chan *bytes.Buffer)
+	bufs := make(chan *Entry)
 	csm.SetHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
-		b := getBuffer()
-		dat := m.Body
-		err := UseDecoder(TestDecoder{}, dat, b)
+		msg := new(Entry)
+		err := msg.Decode(bytes.NewReader(m.Body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		bufs <- b
+		bufs <- msg
 		return nil
 	}))
 	err = csm.ConnectToNSQD("localhost:4150")
@@ -105,12 +104,12 @@ func TestLogMessage(t *testing.T) {
 	// COUNT MESSAGES //
 	counter := 0
 	t.Log("Counting received messages...")
-	var buf *bytes.Buffer
+	var msg *Entry
 	for counter < MAXMSG {
 		select {
-		case buf = <-bufs:
+		case msg = <-bufs:
 			counter++
-			t.Logf("Received %q", buf.String())
+			t.Logf("Received %v", msg)
 		case <-time.After(1 * time.Second):
 			break
 		}

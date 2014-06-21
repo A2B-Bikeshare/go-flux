@@ -55,7 +55,10 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 		}
 	}
 
-	prod := nsq.NewProducer(nsqdAddr, defaultConfig)
+	prod, err := nsq.NewProducer(nsqdAddr, defaultConfig)
+	if err != nil {
+		return nil, err
+	}
 	prod.SetLogger(log.New(os.Stdout, "", 0), nsq.LogLevelDebug)
 	l := &Logger{
 		w:      prod,
