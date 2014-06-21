@@ -11,14 +11,18 @@ var (
 	ErrShortSlice       = errors.New("Slice too short.")                  //ErrShortSlice is returned when an argument slice was too short.
 )
 
-// StructMessage is the interface for types
-// that know how to encode themselves to msg.Writers
-// and decode themselves from msg.Readers.
-// (These should essentially always be pointer-to-struct
-// methods, or types with pointer semantics like maps and
-// slices.)
-type StructMessage interface {
+// Encoder wraps the Encode() method.
+// Encode should marshal information from the calling
+// object into a writer.
+type Encoder interface {
 	Encode(w Writer) error
+}
+
+// Decoder wraps the Decode() method.
+// Decode should overwrite the information
+// contained in the calling object by
+// unmarshaling from the reader in Decode.
+type Decoder interface {
 	Decode(r Reader) error
 }
 
@@ -198,7 +202,7 @@ func (s *Schema) DecodeToSlice(r Reader, v []interface{}) error {
 // as 'p' remains untouched. This is both "dangerous" and highly performant. Use
 // at your own risk.
 func (s *Schema) DecodeToSliceZeroCopy(p []byte, v []interface{}) error {
-	var nn int = 0 //total bytewise progress
+	var nn int //total bytewise progress
 
 	//check for sanity
 	if len(v) < len(*s) {
