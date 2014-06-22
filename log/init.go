@@ -7,11 +7,16 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var (
 	defaultConfig *nsq.Config
+
+	// publisher duration by number (ms) - time idle before closing
+	// 60m, 15m, 4m, 1m, 15s, 4s, 1s, 250ms
+	pubDurs = [maxPubs]int64{60 * 60 * 1000, 15 * 60 * 1000, 4 * 60 * 1000, 60 * 1000, 15 * 1000, 4 * 1000, 1000, 250}
 )
 
 const (
@@ -19,6 +24,8 @@ const (
 	// each publishloop attempts
 	// before exiting fatally
 	nsqRetries = 5
+	// maximum number of publishers
+	maxPubs = 8
 )
 
 func init() {
@@ -34,18 +41,18 @@ func init() {
 // 32 messages sit in the logger message queue. Extra workers close after one minute of inactivity.
 // Writes on the logger never block. Users should avoid writes on a closed logger.
 type Logger struct {
+	status int64 // 0 stopped; 1 running
+	npubs  int64 // number of publishers
 	// Topic is the topic that the logger writes on - should only be set by NewLogger
-	Topic  string
-	w      *nsq.Producer
-	wg     *sync.WaitGroup //used for waiting for conumer and error goroutines to finish
-	cguard *sync.Mutex     //used for accessing logger state; immutable otherwise
-	list   chan msg.Encoder
-	closed bool //closed; only changed by l.Close(); must be accessed by lock/atomic
+	Topic string
+	w     *nsq.Producer
+	wg    *sync.WaitGroup  // used for waiting for consumer and error goroutines to finish
+	swg   *sync.WaitGroup  // used for waiting on async sends to prevent sends on a closed channel
+	list  chan msg.Encoder // used for messages
 }
 
-// NewLogger returns a logger that writes data on the NSQ topic 'Topic'
-// and includes the field 'name' as 'DbName'. 'nsqdAddr' should be the
-// address of an nsqd instance (usually running on the same machine), and 'secret'
+// NewLogger returns a logger that writes data on the NSQ topic 'Topic.'
+// 'nsqdAddr' should be the address of an nsqd instance (usually running on the same machine), and 'secret'
 // is the shared secret with that nsqd instance (can be "" for none.)
 func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Logger, error) {
 	if secret != "" {
@@ -61,17 +68,14 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 	}
 	prod.SetLogger(log.New(os.Stdout, "", 0), nsq.LogLevelDebug)
 	l := &Logger{
-		w:      prod,
-		list:   make(chan msg.Encoder, 32),
+		status: 1,
+		npubs:  0,
 		Topic:  Topic,
+		w:      prod,
 		wg:     new(sync.WaitGroup),
-		cguard: new(sync.Mutex),
-		closed: false,
+		swg:    new(sync.WaitGroup),
+		list:   make(chan msg.Encoder, 32),
 	}
-
-	//launch persistent publish worker
-	l.wg.Add(1)
-	go publoop(l, 1000000*time.Hour)
 
 	return l, nil
 }
@@ -82,7 +86,6 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 // a byte array, and publishes that data to NSQ.
 // Loops timeout (return) after not receiving for 'dur' time
 func publoop(l *Logger, dur time.Duration) {
-	log.Print("flux/log: Publoop started.")
 	dones := make(chan *nsq.ProducerTransaction)
 	var trans *nsq.ProducerTransaction
 	var err error
@@ -98,6 +101,7 @@ func publoop(l *Logger, dur time.Duration) {
 			goto exit
 
 		case msg, ok := <-l.list:
+			// exit on channel close
 			if !ok {
 				goto exit
 			}
@@ -109,52 +113,66 @@ func publoop(l *Logger, dur time.Duration) {
 		send:
 			err = l.w.PublishAsync(l.Topic, buf.Bytes(), dones, nil)
 			if retries > nsqRetries {
-				log.Printf("flux/log: Couldn't connect to NSQ after %d retries. Closing publoop.", retries)
-				log.Printf("ERROR: flux/log: couldn't send message %v", msg)
+				log.Printf("ERROR: flux/log: Couldn't connect to NSQ after %d retries. Closing publoop.", retries)
+				log.Printf("ERROR: flux/log: Couldn't send message %v", msg)
+				goto exit
 			}
 			if err != nil {
 				//end if
 				if err == nsq.ErrStopped {
+					//exit on permanently stopped worker
 					goto exit
-				}
-				// NSQ 'Producer' connects lazily; retry on ErrNotConnected
-				if err == nsq.ErrNotConnected {
-					log.Print("flux/log: NSQ producer not connected. Retrying...")
+				} else if err == nsq.ErrNotConnected {
+					// deal with lazy connecting/disconnecting
+					log.Print("INFO: flux/log: NSQ producer not connected. Retrying...")
 					retries++
-					time.Sleep(200 * time.Millisecond)
+					time.Sleep(20 * time.Millisecond)
 					goto send
+				} else {
+					// unknown error
+					log.Printf("ERROR: flux/log: %s", err.Error())
+				}
+			} else {
+				retries = 0
+				// log transaction errors
+				trans = <-dones
+				if trans.Error != nil {
+					log.Println(err)
 				}
 			}
-			retries = 0
 
-			// wait for transaction to finish; check for err
-			// preferable to synchronous publishing if for
-			// no other reason than to avoid channel initialization cost.
-			trans = <-dones
-			if trans.Error != nil {
-				log.Println(err)
-			}
-
+			// always reset buffer on continue
 			buf.Reset()
 		}
 
 	}
 exit:
-	log.Println("flux/log: Publoop exiting.")
+	_ = atomic.AddInt64(&l.npubs, -1)
 	l.wg.Done()
 }
 
-// push entry onto stack
-// after starting a new publoop
-func sendencoder(e msg.Encoder, l *Logger) {
-	l.wg.Add(1)
-	go publoop(l, 1*time.Minute)
-	select {
-	case l.list <- e:
+// add a publisher worker
+func (l *Logger) addworker() {
+	// don't add if done
+	if atomic.LoadInt64(&l.status) == 0 {
 		return
-	case <-time.After(5 * time.Second):
-		log.Printf("ERROR: flux/log: message %v not sent", e)
 	}
+	// don't add after maxPubs
+	if atomic.LoadInt64(&l.npubs) >= maxPubs {
+		return
+	}
+	l.wg.Add(1)
+	np := atomic.AddInt64(&l.npubs, 1)
+	// check sanity; npubs may have changed (unlikely but possible)
+	// pubDurs[np-1] will panic if np is too large, so this is critical
+	if np > maxPubs {
+		// ABORT
+		_ = atomic.AddInt64(&l.npubs, -1)
+		l.wg.Done()
+		return
+	}
+	log.Printf("Starting publisher %d", np-1)
+	go publoop(l, time.Duration(pubDurs[np-1])*time.Millisecond)
 }
 
 //send a log message over the wire
@@ -167,38 +185,69 @@ func (l *Logger) doMsg(level LogLevel, message string) {
 // put an encoder on the list channel, or start
 // a new publoop
 func (l *Logger) doEncoder(e msg.Encoder) {
+	// check status; return if stopped
+	if atomic.LoadInt64(&l.status) == 0 {
+		return
+	}
+	// ensure at least one worker running
+	if atomic.LoadInt64(&l.npubs) == 0 {
+		// don't go through the usual send process,
+		// or we'll start TWO new workers, because
+		// the send won't immediately succeed.
+		l.addworker()
+		l.swg.Add(1)
+		select {
+		case l.list <- e:
+		case <-time.After(5 * time.Second):
+			log.Printf("ERROR: flux/log: timeout; couldn't send message %v", e)
+		}
+		l.swg.Done()
+		return
+	}
+
+	// register async send
+	l.swg.Add(1)
 	select {
 	case l.list <- e:
-		return
 	default:
-		go sendencoder(e, l)
+		// add capacity if we're backed up
+		l.addworker()
+		l.list <- e
 	}
+	l.swg.Done()
+	return
 }
 
 // IsClosed returns the state of the logger.
-// The logger cannot be 're-opened'.
-func (l *Logger) IsClosed() (b bool) {
-	l.cguard.Lock()
-	if l.closed {
-		b = true
-	} else {
-		b = false
+// The logger cannot be 're-opened' onced closed.
+func (l *Logger) IsClosed() bool {
+	if atomic.LoadInt64(&l.status) == 0 {
+		return true
 	}
-	l.cguard.Unlock()
-	return
+	return false
+}
+
+// Workers returns the number of publisher goroutines
+// running concurrently. (Between zero and eight, dynamically
+// adjusted based on message frequency.)
+func (l *Logger) Workers() int64 {
+	return atomic.LoadInt64(&l.npubs)
 }
 
 // Close permanently closes the logger
 func (l *Logger) Close() {
-	l.cguard.Lock()
-	if l.closed {
+	if !atomic.CompareAndSwapInt64(&l.status, 1, 0) {
+		//already closed
 		return
 	}
-	l.closed = true
-	l.cguard.Unlock()
-	//close list; wait for workers to end.
+	// wait for async sends to end
+	l.swg.Wait()
+	// close channel
 	close(l.list)
+	// wait for pubs to end
 	l.wg.Wait()
+	// stop producer
+	l.w.Stop()
 	return
 }
 
@@ -211,6 +260,10 @@ func (l *Logger) Send(m msg.Encoder) {
 func (l *Logger) Listen(c chan msg.Encoder) {
 	go func(l *Logger) {
 		for e := range c {
+			if atomic.LoadInt64(&l.status) == 0 {
+				c <- e
+				break
+			}
 			l.doEncoder(e)
 		}
 	}(l)

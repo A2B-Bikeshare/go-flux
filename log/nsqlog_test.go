@@ -128,3 +128,64 @@ func TestLogMessage(t *testing.T) {
 	t.Log("Done.")
 	return
 }
+
+// benchmark end-to-end performance
+func BenchmarkLogMessage(b *testing.B) {
+	rand.Seed(time.Now().Unix())
+	NMSG := b.N / 10000
+
+	l, err := NewLogger("test", "test", "localhost:4150", "")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	// CONSUMER //
+	csm, err := nsq.NewConsumer("test", "test_chan", defaultConfig)
+	if err != nil {
+		b.Fatal(err)
+	}
+	bufs := make(chan *Entry)
+	csm.SetHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+		msg := new(Entry)
+		err := msg.Decode(bytes.NewReader(m.Body))
+		if err != nil {
+			b.Fatal(err)
+		}
+		bufs <- msg
+		return nil
+	}))
+	err = csm.ConnectToNSQD("localhost:4150")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	// WRITE MESSAGES //
+	//log 10 messages
+	msgs := getMsgs(NMSG)
+	b.ResetTimer()
+	logMsgs(l, msgs)
+	//ensure everything gets delivered
+
+	// COUNT MESSAGES //
+	counter := 0
+	for counter < NMSG {
+		select {
+		case _ = <-bufs:
+			counter++
+		case <-time.After(1 * time.Second):
+			break
+		}
+	}
+	b.StopTimer()
+	if counter < NMSG {
+		b.Fatalf("Sent %d messages; got %d", NMSG, counter)
+	}
+
+	// CLEANUP //
+	//cleanup
+	csm.Stop()
+	time.Sleep(100 * time.Millisecond)
+	close(bufs)
+	l.Close()
+	return
+}
