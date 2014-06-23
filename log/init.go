@@ -174,8 +174,8 @@ func (l *Logger) addworker() {
 }
 
 //send a log message over the wire
-func (l *Logger) doMsg(level LogLevel, message string) {
-	e := &Entry{Level: int64(level), Message: message}
+func (l *Logger) doMsg(level int64, message string) {
+	e := &Entry{Level: level, Message: message}
 	e.Stamp()
 	l.doEncoder(e)
 }

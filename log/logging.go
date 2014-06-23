@@ -1,39 +1,61 @@
 package log
 
 import (
-	"fmt"
+	"github.com/A2B-Bikeshare/go-flux/msg"
+	"time"
 )
 
-//LogLevel represents one of 'debug/info/warn/error/fatal'
-type LogLevel int64
+// Entry is a simple timestamped leveled message.
+// It satisfies the msg.Encoder and msg.Decoder interfaces.
+// Entry is an example of a type that can be used
+// with go-flux.
+type Entry struct {
+	stamp   uint64
+	Level   int64
+	Message string
+}
 
-const (
-	DEBUG LogLevel = iota //Debug log level
-	INFO  LogLevel = iota //Info log level
-	WARN  LogLevel = iota //Warn log level
-	ERROR LogLevel = iota //Error log level
-	FATAL LogLevel = iota //Fatal log level
-)
+// Timestamp returns the timestamp of an entry,
+// or time.Now() if it hasn't been stamped yet.
+func (e *Entry) Timestamp() uint64 {
+	if e.stamp == 0 {
+		return uint64(time.Now().Unix())
+	}
+	return e.stamp
+}
 
-// Info logs at the INFO level
-func (l *Logger) Info(v string)                            { l.doMsg(INFO, v) }
-func (l *Logger) Infof(format string, args ...interface{}) { l.doMsg(INFO, fmt.Sprintf(format, args)) }
+// Stamp fixes the timestamp on an entry to the moment
+// Stamp() is called.
+func (e *Entry) Stamp() {
+	e.stamp = uint64(time.Now().Unix())
+}
 
-// Debug logs at the DEBUG level
-func (l *Logger) Debug(v string)                            { l.doMsg(DEBUG, v) }
-func (l *Logger) Debugf(format string, args ...interface{}) { l.doMsg(DEBUG, fmt.Sprintf(format, args)) }
+// Encode writes an entry with a timestamp of time.Now().Unix()
+func (e *Entry) Encode(w msg.Writer) error {
+	msg.WriteUint(w, e.Timestamp())
+	msg.WriteInt(w, e.Level)
+	msg.WriteString(w, e.Message)
+	return nil
+}
 
-// Warn logs at the WARN level
-func (l *Logger) Warn(v string)                            { l.doMsg(WARN, v) }
-func (l *Logger) Warnf(format string, args ...interface{}) { l.doMsg(WARN, fmt.Sprintf(format, args)) }
+// Decode reads an Entry from a msg.Reader
+func (e *Entry) Decode(r msg.Reader) error {
+	stamp, err := msg.ReadUint(r)
+	if err != nil {
+		return err
+	}
+	level, err := msg.ReadInt(r)
+	if err != nil {
+		return err
+	}
+	msg, err := msg.ReadString(r)
+	if err != nil {
+		return err
+	}
+	e.stamp, e.Level, e.Message = stamp, level, msg
+	return nil
+}
 
-// Error logs at the ERROR level
-func (l *Logger) Error(v string)                            { l.doMsg(ERROR, v) }
-func (l *Logger) Errorf(format string, args ...interface{}) { l.doMsg(ERROR, fmt.Sprintf(format, args)) }
-
-// Fatal logs at the FATAL level
-func (l *Logger) Fatal(v string)                            { l.doMsg(FATAL, v) }
-func (l *Logger) Fatalf(format string, args ...interface{}) { l.doMsg(FATAL, fmt.Sprintf(format, args)) }
-
-// Log at an arbitrary level
-func (l *Logger) Log(level LogLevel, v string) { l.doMsg(level, v) }
+// log at an arbitrary level
+// keep for testing purposes
+func (l *Logger) log(level int64, v string) { l.doMsg(level, v) }

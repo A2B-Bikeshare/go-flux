@@ -12,11 +12,11 @@ import (
 
 var (
 	MSGS   = []string{"This is debug info.", "This is info info.", "This is a warning.", "This is an error...", "This is FATALLLL"}
-	LEVELS = []LogLevel{0, 1, 2, 3, 4}
+	LEVELS = []int64{0, 1, 2, 3, 4}
 )
 
 type Msg struct {
-	Level   LogLevel
+	Level   int64
 	Message string
 }
 
@@ -38,7 +38,7 @@ func getMsgs(n int) []Msg {
 
 func logMsgs(l *Logger, msgs []Msg) {
 	for _, msg := range msgs {
-		l.Log(msg.Level, msg.Message)
+		l.log(msg.Level, msg.Message)
 	}
 }
 
