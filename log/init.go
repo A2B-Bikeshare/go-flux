@@ -5,6 +5,7 @@ import (
 	"github.com/A2B-Bikeshare/go-flux/msg"
 	"github.com/bitly/go-nsq"
 	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,7 +125,7 @@ func publoop(l *Logger, dur time.Duration) {
 					// deal with lazy connecting/disconnecting
 					log.Print("INFO: flux/log: NSQ producer not connected. Retrying...")
 					retries++
-					time.Sleep(20 * time.Millisecond)
+					runtime.Gosched()
 					goto send
 				} else {
 					// unknown error
