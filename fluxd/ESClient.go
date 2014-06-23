@@ -1,44 +1,42 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/philhofer/fluxlog"
-	"io"
+	"github.com/A2B-Bikeshare/go-flux/msg"
 	"net/http"
-	"strconv"
+	"sync"
 )
 
-const ESDATATYPE = "entry"
-
-var (
-	ESPREFIX []byte = strconv.AppendQuote([]byte{}, `{"create":{"_type":"entry"}}`)
-	ESSUFFIX []byte = strconv.AppendQuote([]byte{}, `}\n`)
-)
-
-type ESConn struct{}
-
-func (e *ESConn) Request(saddr string, topic string, b *bytes.Buffer) (req *http.Request, err error) {
-	return http.NewRequest("POST", fmt.Sprintf("%s/%s/%s/", saddr, topic, ESDATATYPE), b)
+// ElasticsearchDB conforms to the
+// DB interface.
+type ElasticsearchDB struct {
+	Addr   string
+	Index  string
+	Dtype  string
+	fqaddr string
+	once   *sync.Once
 }
 
-func (e *ESConn) Validate(res *http.Response) error {
-	switch res.StatusCode {
-	case 200, 201:
-		return nil
-	default:
-		return fmt.Errorf("Bad Response.")
+func (e *ElasticsearchDB) Address() string {
+	e.once.Do(func() {
+		e.fqaddr = fmt.Sprintf("%s/%s/%s", e.Addr, e.Index, e.Dtype)
+	})
+	return e.fqaddr
+}
+
+// TODO
+func (e ElasticsearchDB) Translate(r msg.Reader, w io.Writer) error {
+	//TODO
+	return nil
+}
+
+func (e ElasticsearchDB) Req(r io.Reader) (r *http.Request, err error) {
+	r, err = http.NewRequest("POST", e.Address(), r)
+	return
+}
+
+func (e ElasticsearchDB) Validate(res *http.Response) error {
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return fmt.Errorf("[ERR] Elasticsearch (%s/%s/%s): status code %d", e.Addr, e.Index, e.Dtype, res.StatusCode)
 	}
-}
-
-func (e *ESConn) Prefix() []byte {
-	return ESPREFIX
-}
-
-func (e *ESConn) Suffix() []byte {
-	return ESSUFFIX
-}
-
-func (e *ESConn) Decode(s fluxlog.CapEntry, w io.Writer) error {
-	return fluxlog.ElasticSearchDecode(s, w)
 }
