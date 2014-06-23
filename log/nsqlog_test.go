@@ -43,7 +43,8 @@ func logMsgs(l *Logger, msgs []Msg) {
 }
 
 func TestConnection(t *testing.T) {
-	t.Skip()
+	t.Skip("TODO")
+	// malformed
 	t.Log("Testing connection...")
 	conn := nsq.NewConn("localhost:4150", defaultConfig)
 	id, err := conn.Connect()
@@ -63,7 +64,7 @@ func TestLogMessage(t *testing.T) {
 	MAXMSG := 5 //max messages consumed
 
 	t.Log("Making logger...")
-	l, err := NewLogger("test", "test", "localhost:4150", "")
+	l, err := NewLogger("test", "localhost:4150", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +135,7 @@ func BenchmarkLogMessage(b *testing.B) {
 	rand.Seed(time.Now().Unix())
 	NMSG := b.N / 10000
 
-	l, err := NewLogger("test", "test", "localhost:4150", "")
+	l, err := NewLogger("test", "localhost:4150", "")
 	if err != nil {
 		b.Fatal(err)
 	}

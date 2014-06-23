@@ -5,7 +5,6 @@ import (
 	"github.com/A2B-Bikeshare/go-flux/msg"
 	"github.com/bitly/go-nsq"
 	"log"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,8 +40,8 @@ func init() {
 // 32 messages sit in the logger message queue. Extra workers close after one minute of inactivity.
 // Writes on the logger never block. Users should avoid writes on a closed logger.
 type Logger struct {
-	status int64 // 0 stopped; 1 running
-	npubs  int64 // number of publishers
+	status int64 // 0 stopped; 1 running; others for future use (?)
+	npubs  int64 // number of publishers running
 	// Topic is the topic that the logger writes on - should only be set by NewLogger
 	Topic string
 	w     *nsq.Producer
@@ -54,7 +53,7 @@ type Logger struct {
 // NewLogger returns a logger that writes data on the NSQ topic 'Topic.'
 // 'nsqdAddr' should be the address of an nsqd instance (usually running on the same machine), and 'secret'
 // is the shared secret with that nsqd instance (can be "" for none.)
-func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Logger, error) {
+func NewLogger(Topic string, nsqdAddr string, secret string) (*Logger, error) {
 	if secret != "" {
 		err := defaultConfig.Set("auth_secret", secret)
 		if err != nil {
@@ -66,7 +65,6 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 	if err != nil {
 		return nil, err
 	}
-	prod.SetLogger(log.New(os.Stdout, "", 0), nsq.LogLevelDebug)
 	l := &Logger{
 		status: 1,
 		npubs:  0,
@@ -74,7 +72,7 @@ func NewLogger(Topic string, DbName string, nsqdAddr string, secret string) (*Lo
 		w:      prod,
 		wg:     new(sync.WaitGroup),
 		swg:    new(sync.WaitGroup),
-		list:   make(chan msg.Encoder, 32),
+		list:   make(chan msg.Encoder, 64),
 	}
 
 	return l, nil
@@ -171,7 +169,7 @@ func (l *Logger) addworker() {
 		l.wg.Done()
 		return
 	}
-	log.Printf("Starting publisher %d", np-1)
+	log.Printf("INF: flux/log: Starting publisher %d", np-1)
 	go publoop(l, time.Duration(pubDurs[np-1])*time.Millisecond)
 }
 
