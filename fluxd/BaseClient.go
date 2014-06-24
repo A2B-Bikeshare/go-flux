@@ -1,4 +1,4 @@
-package main
+package fluxd
 
 import (
 	"bytes"
