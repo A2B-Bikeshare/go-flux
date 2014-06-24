@@ -11,7 +11,8 @@ import (
 )
 
 // ElasticsearchDB conforms to the
-// DB interface.
+// DB interface. It POSTs to http://{Addr}/{Index}/{Dtype}/
+// using the output of Translate() as the message body.
 type ElasticsearchDB struct {
 	Schema msg.Schema
 	Addr   string
@@ -143,6 +144,7 @@ func (e ElasticsearchDB) Req(r io.Reader) (hr *http.Request, err error) {
 
 // Validate returns an error if res.StatusCode is not 200 or 201
 func (e ElasticsearchDB) Validate(res *http.Response) error {
+	res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
 		return fmt.Errorf("[ERR] Elasticsearch (%s/%s/%s): status code %d", e.Addr, e.Index, e.Dtype, res.StatusCode)
 	}
