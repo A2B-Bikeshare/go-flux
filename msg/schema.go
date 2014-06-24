@@ -31,8 +31,8 @@ type Schema []Object
 
 //Object represents a named object of known type
 type Object struct {
-	T    Type
 	Name string
+	T    Type
 }
 
 // Serialize packs the schema itself into a msg
