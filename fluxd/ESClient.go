@@ -13,7 +13,7 @@ import (
 // ElasticsearchDB conforms to the
 // DB interface.
 type ElasticsearchDB struct {
-	Schema *msg.Schema
+	Schema msg.Schema
 	Addr   string
 	Index  string
 	Dtype  string
@@ -22,7 +22,7 @@ type ElasticsearchDB struct {
 }
 
 // Address returns the endpoint that this db POSTs to.
-func (e *ElasticsearchDB) Address() string {
+func (e ElasticsearchDB) Address() string {
 	e.once.Do(func() {
 		e.fqaddr = fmt.Sprintf("%s/%s/%s", e.Addr, e.Index, e.Dtype)
 	})
@@ -37,7 +37,7 @@ func (e ElasticsearchDB) Translate(p []byte, w msg.Writer) error {
 	empty := []byte{}
 	w.WriteByte(lcurly)
 
-	for i, o := range *(e.Schema) {
+	for i, o := range e.Schema {
 		//write comma
 		if i != 0 {
 			w.WriteByte(comma)
