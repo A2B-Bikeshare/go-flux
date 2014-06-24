@@ -9,13 +9,21 @@ import (
 
 var gcl *http.Client
 
+// common bytes for json writing
+var (
+	comma  byte = 0x2c //','
+	colon  byte = 0x3a //':'
+	lcurly byte = 0x7b //'{'
+	rcurly byte = 0x7d //'}'
+)
+
 // DB is the interface that fluxd uses to communicate with a database.
 type DB interface {
 	// Translate turns flux/msg data into valid data for the
 	// database to consume. (Typically, JSON.) Translate
 	// should return an error if it encounters an error reading
-	// from 'r' or writing to 'w'
-	Translate(r msg.Reader, w io.Writer) error
+	// from 'p'.
+	Translate(p []byte, w msg.Writer) error
 	// Req should return a valid *http.Request to be performed
 	// by an http client. 'r' should be used
 	// as the body of the request.
@@ -27,7 +35,7 @@ type DB interface {
 }
 
 // drives database decoding & writing
-func dbHandle(db DB, r msg.Reader) error {
+func dbHandle(db DB, r []byte) error {
 	buf := bytes.NewBuffer(nil)
 	err := db.Translate(r, buf)
 	if err != nil {

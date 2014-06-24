@@ -122,6 +122,12 @@ func ReadFloat(r Reader) (f float64, err error) {
 	return
 }
 
+// ReadFloatBytes returns a float64 from 'p' along with
+// the number of bytes read, or an error.
+func ReadFloatBytes(p []byte) (f float64, n int, err error) {
+	return readFloatBytes(p)
+}
+
 // ReadInt tries to read into an int64
 func ReadInt(r Reader) (i int64, err error) {
 	i, err = readInt(r)
@@ -132,6 +138,9 @@ func ReadInt(r Reader) (i int64, err error) {
 	}
 	return
 }
+
+// ReadIntBytes reads an int64 from 'p'
+func ReadIntBytes(p []byte) (i int64, n int, err error) { return readIntBytes(p) }
 
 // ReadUint tries to read into a uint64.
 func ReadUint(r Reader) (u uint64, err error) {
@@ -144,6 +153,8 @@ func ReadUint(r Reader) (u uint64, err error) {
 	return
 }
 
+func ReadUintBytes(p []byte) (u uint64, n int, err error) { return readUintBytes(p) }
+
 // ReadString tries to read into a string.
 func ReadString(r Reader) (s string, err error) {
 	s, err = readString(r)
@@ -155,6 +166,12 @@ func ReadString(r Reader) (s string, err error) {
 	return
 }
 
+// ReadStringZeroCopy reads a string from 'p' into s.
+// Note that the string returned violates immutability, as changes
+// to 'p' will change 's'. (The underlying pointer-to-byte-array in
+// 's' points to 'p'.) Use with extreme care!
+func ReadStringZeroCopy(p []byte) (s string, n int, err error) { return readStringZeroCopy(p) }
+
 // ReadBool tries to read into a bool.
 func ReadBool(r Reader) (b bool, err error) {
 	b, err = readBool(r)
@@ -165,6 +182,10 @@ func ReadBool(r Reader) (b bool, err error) {
 	}
 	return
 }
+
+// ReadBoolBytes reads a bool from 'p', along with the number
+// of bytes read, or an error.
+func ReadBoolBytes(p []byte) (b bool, n int, err error) { return readBoolBytes(p) }
 
 // ReadBin tries to read into a byte slice.
 // The slice 'b' is used for buffering in order to avoid allocations,
@@ -183,6 +204,10 @@ func ReadBin(r Reader, b []byte) (dat []byte, err error) {
 	return
 }
 
+// ReadBinZeroCopy returns the slice of 'p' that corresponds to
+// binary data, along with the number of bytes read, or an error.
+func ReadBinZeroCopy(p []byte) (dat []byte, n int, err error) { return readBinZeroCopy(p) }
+
 // ReadExt tries to read into an PackExt.
 // The slice 'b' is used in order to avoid allocations,
 // but it can safely be nil. In many cases, 'b' should be
@@ -200,17 +225,22 @@ func ReadExt(r Reader, b []byte) (p *PackExt, err error) {
 	return p, nil
 }
 
-/* ReadInterface returns an interface{} containing the leading object in the reader,
-along with its msg.Type.
+// ReadExtZeroCopy returns the extension type and binary array
+// starting at p[0:], along with the number of bytes read, or an error.
+// Note that 'dat' is a slice of 'p' - changes to 'p' will be reflected in 'dat' and vice-versa.
+func ReadExtZeroCopy(p []byte) (dat []byte, etype int8, n int, err error) { return readExtZeroCopy(p) }
 
-Provided no error is returned, the following type assertions on the interface{} should be legal:
- - msg.Int -> int64
- - msg.Uint -> uint64
- - msg.Bool -> bool
- - msg.Ext -> *msg.PackExt
- - msg.Bin -> []byte
- - msg.String -> string
- - msg.Float -> float64	*/
+// ReadInterface returns an interface{} containing the leading object in the reader,
+// along with its msg.Type.
+//
+// Provided no error is returned, the following type assertions on the interface{} should be legal:
+//  - msg.Int -> int64
+//  - msg.Uint -> uint64
+//  - msg.Bool -> bool
+//  - msg.Ext -> *msg.PackExt
+//  - msg.Bin -> []byte
+//  - msg.String -> string
+//  - msg.Float -> float64
 func ReadInterface(r Reader) (v interface{}, t Type, err error) {
 	var c byte
 
