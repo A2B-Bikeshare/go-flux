@@ -9,12 +9,15 @@ import (
 )
 
 // common UTF-8 bytes for json writing; useful for w.WriteByte
-var (
+const (
 	comma  byte = 0x2c //','
 	colon  byte = 0x3a //':'
 	lcurly byte = 0x7b //'{'
 	rcurly byte = 0x7d //'}'
-	bpl    *sync.Pool
+)
+
+var (
+	bpl *sync.Pool
 )
 
 func init() {
@@ -27,10 +30,12 @@ func getBuf() *bytes.Buffer {
 	if !ok || buf == nil {
 		return bytes.NewBuffer(make([]byte, 0, 128))
 	}
+	buf.Reset()
 	return buf
 }
 
 func putBuf(b *bytes.Buffer) {
+	b.Reset()
 	bpl.Put(b)
 }
 
@@ -68,7 +73,7 @@ func dbHandle(db DB, r []byte, dcl *http.Client) error {
 	}
 	// do request; get response
 	res, err := dcl.Do(req)
-	putBuf(buf)
+	putBuf(buf) //we must be done with buffer
 	if err != nil {
 		return err
 	}

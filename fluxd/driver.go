@@ -1,41 +1,90 @@
 package fluxd
 
 import (
+	"errors"
 	"github.com/bitly/go-nsq"
 	"net/http"
-	"sync"
 )
+
+var (
+	// DefaultConfig is the default configuration used for NSQ communications by each binding if one is not specified.
+	DefaultConfig *nsq.Config
+)
+
+func init() {
+	DefaultConfig = nsq.NewConfig()
+	_ = DefaultConfig.Set("max_in_flight", 25)
+}
 
 // Server represents a collection of bindings
 // to an NSQlookupd instance.
 type Server struct {
-	// Config used for NSQ connections
+	// Config used for NSQ connections; defaults to DefaultConfig
 	NSQConfig *nsq.Config
 	// Address(es) of nsqlookupd(s)
 	Lookupdaddrs []string
 	bindings     []*Binding
 }
 
-// Stop ends all of the server processes gracefully, and blocks until completion.
-// (This may take up to 30 seconds.)
+// Stop ends all of the server processes gracefully. It does not block.
 func (s *Server) Stop() {
-	wg := new(sync.WaitGroup)
-	wg.Add(len(s.bindings))
 	for _, b := range s.bindings {
-		go func(b *Binding, wg *sync.WaitGroup) {
+		go func(b *Binding) {
 			b.cons.Stop()
-			<-b.cons.StopChan
-			wg.Done()
 			return
-		}(b, wg)
+		}(b)
 	}
-	wg.Wait()
 }
 
 // use server config and addrs to configure a binding
 // and start the consumer, client, and handler
 func (s *Server) startrun(b *Binding) error {
+	var err error
+	b.cons, err = nsq.NewConsumer(b.Topic, b.Channel, s.NSQConfig)
+	if err != nil {
+		return err
+	}
 
+	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
+	if err != nil {
+		return err
+	}
+
+	// default client
+	b.dcl = &http.Client{}
+	if b.Workers <= 0 {
+		b.Workers = 1
+	}
+	b.cons.SetConcurrentHandlers(b, b.Workers)
+	return nil
+}
+
+// Run blocks until all bindings exit gracefully, usually after a call to Stop.
+// Run immediately returns an error if the server is not configured correctly.
+func (s *Server) Run() error {
+	var err error
+	if s.NSQConfig == nil {
+		s.NSQConfig = DefaultConfig
+	}
+	err = s.NSQConfig.Validate()
+	if err != nil {
+		return err
+	}
+
+	if len(s.bindings) == 0 {
+		return errors.New("No bindings registered.")
+	}
+
+	for _, b := range s.bindings {
+		err = s.startrun(b)
+		if err != nil {
+			return err
+		}
+	}
+	// block until graceful stop
+	for _, b := range s.bindings {
+		<-b.cons.StopChan
+	}
 	return nil
 }
 
@@ -47,6 +96,13 @@ type Binding struct {
 	Channel string
 	// Endpoint is the database and decode logic used for this topic & channel
 	Endpoint DB
-	dcl      *http.Client  //used for database communication
-	cons     *nsq.Consumer //used for nsq communication
+	// Workers sets the number of concurrent goroutines serving this binding; defaults to 1
+	Workers int
+	dcl     *http.Client  //used for database communication
+	cons    *nsq.Consumer //used for nsq communication
+}
+
+// HandleMessage implements the nsq.Handler interface
+func (b *Binding) HandleMessage(msg *nsq.Message) error {
+	return dbHandle(b.Endpoint, msg.Body, b.dcl)
 }
