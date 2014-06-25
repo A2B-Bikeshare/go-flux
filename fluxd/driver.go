@@ -36,6 +36,9 @@ func (s *Server) Stop() {
 	}
 }
 
+// Bind adds a binding to the server. Bind must be called before Run.
+func (s *Server) Bind(b *Binding) { s.bindings = append(s.bindings, b) }
+
 // use server config and addrs to configure a binding
 // and start the consumer, client, and handler
 func (s *Server) startrun(b *Binding) error {
@@ -71,7 +74,7 @@ func (s *Server) Run() error {
 		return err
 	}
 
-	if len(s.bindings) == 0 {
+	if s.bindings == nil || len(s.bindings) == 0 {
 		return errors.New("No bindings registered.")
 	}
 
