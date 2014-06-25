@@ -5,6 +5,7 @@ import (
 	"github.com/A2B-Bikeshare/go-flux/msg"
 	"sync"
   "io"
+  "net/http"
 )
 
 // TODO
