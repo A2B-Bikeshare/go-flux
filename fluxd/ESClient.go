@@ -30,7 +30,9 @@ func (e ElasticsearchDB) Address() string {
 	return e.fqaddr
 }
 
-// Translate uses e.Schema to write json into 'w'
+// Translate uses e.Schema to write json into 'w'.
+// Per the elasticsearch type specification,
+// binary types are encoded to base64-encoded quoted strings.
 func (e ElasticsearchDB) Translate(p []byte, w msg.Writer) error {
 	var nr int //totoal number of bytes read
 	var n int  //each number of bytes read

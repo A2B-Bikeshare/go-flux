@@ -13,10 +13,10 @@
 // Consider the following message:
 //  {"compact":true, "schema":0}
 // Ordinarily, messagepack would encode that as:
-//  \0x82\0xA7compact\0xC3\0xA6schema\0x00
+//  \0x82 \0xA7 compact \0xC3 \0xA6 schema \0x00
 //  [2-element map][7-byte string]["compact"][true][6-byte string]["schema"][0 (int)]
 // whereas Flux/msg encodes as:
-//  \0xC3\0x00
+//  \0xC3 \0x00
 //  [true][0 (int)]
 // Provided that both the sender and receiver know that this message
 // type is always a boolean followed by an integer, and that the
@@ -27,6 +27,10 @@
 // both senders and receivers must know the type specification
 // beforehand. (To facilitate more runtime flexibility, Schema
 // types know how to serialize and de-serialize themselves!)
+// For small messages, Flux/msg is MUCH smaller than even
+// standard messagepack (2 bytes vs 18 bytes in our example),
+// and it encodes and decodes quickly because we
+// avoid runtime type reflection.
 package msg
 
 // PackExt represents a MessagePack extension, and has msg.Type = msg.Ext.

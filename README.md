@@ -1,4 +1,4 @@
-Flux for Go [![GoDoc](https://godoc.org/github.com/A2B-Bikeshare/go-flux?status.png)](https://godoc.org/github.com/A2B-Bikeshare/go-flux)
+Flux for Go [![GoDoc](https://godoc.org/github.com/A2B-Bikeshare/go-flux?status.png)](https://godoc.org/github.com/A2B-Bikeshare/go-flux) [![Coverage Status](https://coveralls.io/repos/A2B-Bikeshare/go-flux/badge.png)](https://coveralls.io/r/A2B-Bikeshare/go-flux)
 =====================
 Write *all the messages*.
 Powered by [NSQ](http://nsq.io/) and a custom dialect of [MessagePack](http://msgpack.org).

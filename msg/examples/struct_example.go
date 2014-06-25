@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/philhofer/go-flux/msg"
+	"github.com/A2B-Bikeshare/go-flux/msg"
 )
 
 // Person - the struct we want to encode/decode
