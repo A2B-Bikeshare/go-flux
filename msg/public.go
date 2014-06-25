@@ -1,3 +1,32 @@
+// Flux/msg implements a stripped-down
+// version of the MessagePack serialization protocol
+// (http://msgpack.org/). Flux/msg does not prefix
+// encodings with map or array headers; rather, it
+// assumes that the sender and receiver share
+// a "Schema" that defines the ordering, types,
+// and names of each value in the message.
+// Consequently, the messages themselves only
+// contain a list of type identifiers and raw
+// values, rather than an array or map. Write
+// and Read methods still use the standard
+// MessagePack single-byte type prefixes.
+// Consider the following message:
+//  {"compact":true, "schema":0}
+// Ordinarily, messagepack would encode that as:
+//  \0x82\0xA7compact\0xC3\0xA6schema\0x00
+//  [2-element map][7-byte string]["compact"][true][6-byte string]["schema"][0 (int)]
+// whereas Flux/msg encodes as:
+//  \0xC3\0x00
+//  [true][0 (int)]
+// Provided that both the sender and receiver know that this message
+// type is always a boolean followed by an integer, and that the
+// boolean is named "compact" and the integer is named "schema",
+// the message above serves as a complete message. In that sense,
+// we can consider these messages to be "strongly-typed," as they
+// have a fixed ordering of non-optional named fields, and
+// both senders and receivers must know the type specification
+// beforehand. (To facilitate more runtime flexibility, Schema
+// types know how to serialize and de-serialize themselves!)
 package msg
 
 // PackExt represents a MessagePack extension, and has msg.Type = msg.Ext.

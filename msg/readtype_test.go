@@ -327,7 +327,7 @@ func TestReadFloatBytes(t *testing.T) {
 		}
 
 		if n != len(buf.Bytes()) {
-			t.Errorf("Test case %d: Read %d bytes; should have read %d.", n, len(buf.Bytes()))
+			t.Errorf("Test case %d: Read %d bytes; should have read %d.", i, n, len(buf.Bytes()))
 		}
 
 		if issmall[i] {
