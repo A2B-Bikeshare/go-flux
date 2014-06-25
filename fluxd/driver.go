@@ -17,7 +17,7 @@ func init() {
 }
 
 // Server represents a collection of bindings
-// to an NSQlookupd instance.
+// to NSQLookupd instances.
 type Server struct {
 	// Config used for NSQ connections; defaults to DefaultConfig
 	NSQConfig *nsq.Config

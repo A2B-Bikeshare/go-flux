@@ -14,6 +14,8 @@ const (
 	colon  byte = 0x3a //':'
 	lcurly byte = 0x7b //'{'
 	rcurly byte = 0x7d //'}'
+	lsqr   byte = 0x5b //'['
+	rsqr   byte = 0x5d //']'
 )
 
 var (
