@@ -1,7 +1,20 @@
 package msg
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"strconv"
+)
+
+const (
+	comma  byte = 0x2c //','
+	colon  byte = 0x3a //':'
+	lcurly byte = 0x7b //'{'
+	rcurly byte = 0x7d //'}'
+	lsqr   byte = 0x5b //'['
+	rsqr   byte = 0x5d //']'
+	qte    byte = 0x22 //'"'
 )
 
 var (
@@ -26,6 +39,15 @@ type Decoder interface {
 	Decode(r Reader) error
 }
 
+// SelfMessager represents an object
+// that knows how to read itself
+// from a message and also encode
+// itself to a message.
+type SelfMessager interface {
+	Decoder
+	Encoder
+}
+
 //Schema represents an ordering of named objects
 type Schema []Object
 
@@ -35,60 +57,64 @@ type Object struct {
 	T    Type
 }
 
-// Serialize packs the schema itself into a msg
-func (s *Schema) SerializeTo(w Writer) {
+// Encode implements the Encoder interface
+func (s *Schema) Encode(w Writer) {
+	// Schemas are encoded as a length followed by Uint-String pairs representing Type and Name
+
+	// Write Length
 	n := len(*s)
-	//write length
 	WriteInt(w, int64(n))
 
-	//write objects
+	// Write Objects
 	for _, o := range *s {
 		WriteUint(w, uint64(o.T))
 		WriteString(w, o.Name)
 	}
 }
 
-// ReadSchema returns a Schema from the output of s.SerializeTo()
-func ReadSchema(r Reader) (s *Schema, err error) {
+// Decode implements the Decoder interface
+// If Decode returns an error, the Schema remains unchanged.
+func (s *Schema) Decode(r Reader) error {
+	// read length
 	n, err := ReadInt(r)
 	if err != nil {
-		return
+		return err
 	}
 
 	var name string
 	var t uint64
 
+	// read type-name pairs
 	os := make([]Object, n)
 	for i := 0; i < int(n); i++ {
 		t, err = ReadUint(r)
 		if err != nil {
-			return
+			return err
 		}
 		name, err = ReadString(r)
 		if err != nil {
-			return
+			return err
 		}
 
 		os[i] = Object{T: Type(uint8(t)), Name: name}
 	}
-	s = (*Schema)(&os)
-	return
+	*s = (Schema)(os)
+	return nil
 }
 
-/* MakeSchema makes a Schema out of a []string and []interface{}.
-The 'names' and 'types' slices *must* be the same length.
-Supported interface{} values are:
-
- float64, float32
- uint8, uint16, uint32, uint64
- int8, int16, int32, int64
- bool
- string
- []byte (binary)
-
-Note that even though MakeSchema accepts non-64-bit types, the types used in
-Encode() *must* be 64-bit (float64, int64, uint64), because the interface{} is type-asserted
-to those types internally. */
+// MakeSchema makes a Schema out of a []string and []interface{}.
+// The 'names' and 'types' slices *must* be the same length.
+// Supported interface{} values are:
+//
+//  float64, float32
+//  uint8, uint16, uint32, uint64
+//  int8, int16, int32, int64
+//  bool
+//  string
+//  []byte (binary)
+//
+// Note that even though MakeSchema accepts non-64-bit types, the types used in
+// Encode() *must* be 64-bit (float64, int64, uint64)
 func MakeSchema(names []string, types []interface{}) (s *Schema, err error) {
 	if len(names) != len(types) {
 		err = ErrBadArgs
@@ -344,7 +370,7 @@ func (s *Schema) DecodeToMap(r Reader, m map[string]interface{}) error {
 	return nil
 }
 
-//Encode uses a schema to encode a slice-of-interface to a writer.
+// EncodeSlice uses a schema to encode a slice-of-interface to a msg.Writer.
 func (s *Schema) EncodeSlice(a []interface{}, w Writer) (err error) {
 	for i, v := range a {
 		err = encode(v, (*s)[i], w)
@@ -353,6 +379,126 @@ func (s *Schema) EncodeSlice(a []interface{}, w Writer) (err error) {
 		}
 	}
 	return
+}
+
+// WriteJSON writes an encoded message in memory
+// as a JSON-encoded map of key-value pairs. Ext-type
+// values are encoded as {"extension_type":<int8>, "data":<base64 string>}.
+// Bin values are encoded as base64 strings.
+// Each value is keyed by its Name field in the Schema.
+func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
+	var nr int //totoal number of bytes read
+	var n int  //each number of bytes read
+	var err error
+	empty := []byte{}
+	w.WriteByte(lcurly)
+
+	// Read-Write loop
+	for i, o := range *s {
+		// write comma
+		if i != 0 {
+			w.WriteByte(comma)
+
+		}
+		// Write Name
+		w.WriteByte(qte)
+		w.WriteString(o.Name)
+		w.WriteByte(qte)
+
+		// Write ":"
+		w.WriteByte(colon)
+
+		// Read value, write value
+		switch o.T {
+		case String:
+			var s string
+			s, n, err = ReadStringZeroCopy(p[nr:]) //safe, b/c we only retain the reference internally
+			if err != nil {
+				return err
+			}
+			w.WriteByte(qte)
+			w.WriteString(s)
+			w.WriteByte(qte)
+			nr += n
+			continue
+
+		case Int:
+			var i int64
+			i, n, err = ReadIntBytes(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.Write(strconv.AppendInt(empty, i, 10))
+			nr += n
+			continue
+
+		case Uint:
+			var u uint64
+			u, n, err = ReadUintBytes(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.Write(strconv.AppendUint(empty, u, 10))
+			nr += n
+			continue
+
+		case Bool:
+			var b bool
+			b, n, err = ReadBoolBytes(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.Write(strconv.AppendBool(empty, b))
+			nr += n
+			continue
+
+		case Float:
+			var f float64
+			f, n, err = ReadFloatBytes(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.Write(strconv.AppendFloat(empty, f, 'f', -1, 64))
+			nr += n
+			continue
+
+		case Bin:
+			var dat []byte
+			dat, n, err = ReadBinZeroCopy(p[nr:]) //again, safe b/c of internal handling
+			if err != nil {
+				return err
+			}
+			w.WriteString("\"" + base64.StdEncoding.EncodeToString(dat) + "\"")
+			nr += n
+			continue
+
+		case Ext:
+			var dat []byte
+			var etype int8
+			// Ext is the only nested object
+			dat, etype, n, err = ReadExtZeroCopy(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.WriteByte(lcurly)
+			w.WriteString("\"extension_type\":")
+			w.Write(strconv.AppendInt(empty, int64(etype), 10))
+			w.WriteByte(comma)
+			w.WriteString("\"data\":")
+			w.WriteString("\"" + base64.StdEncoding.EncodeToString(dat) + "\"")
+			w.WriteByte(rcurly)
+			nr += n
+			continue
+
+		default:
+			return ErrTypeNotSupported
+
+		}
+
+	}
+
+	err = w.WriteByte(rcurly)
+	return err
 }
 
 func encode(v interface{}, o Object, w Writer) error {

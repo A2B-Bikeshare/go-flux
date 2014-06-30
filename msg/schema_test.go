@@ -2,6 +2,7 @@ package msg
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -87,12 +88,16 @@ func TestReadWriteSchema(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	s.SerializeTo(buf)
+	s.Encode(buf)
 
-	snew, err := ReadSchema(buf)
+	snew := new(Schema)
+	err = snew.Decode(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	t.Logf("First schema: %#v", s)
+	t.Logf("Second schema: %#v", snew)
 
 	if !reflect.DeepEqual(snew, s) {
 		t.Errorf("Expected %v; got %v", s, snew)
@@ -363,4 +368,63 @@ func BenchmarkSchemaDecodeToSliceZeroCopy(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func BenchmarkWriteJSON(b *testing.B) {
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "here's a string"
+	values[4] = []byte{3, 4, 5, 8}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	buf := bytes.NewBuffer(nil)
+	s.EncodeSlice(values, buf)
+	b.SetBytes(int64(len(buf.Bytes())))
+	bts := buf.Bytes()
+	outbuf := bytes.NewBuffer(nil)
+	outbuf.Grow(256)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = s.WriteJSON(bts, outbuf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		outbuf.Reset()
+	}
+
+}
+
+func BenchmarkStdJSON(b *testing.B) {
+	type teststruct struct {
+		Float  float64 `json:"float"`
+		Int    int64   `json:"int"`
+		Uint   uint64  `json:"uint"`
+		String string  `json:"string"`
+		Bin    []byte  `json:"bin"`
+	}
+	testdat := &teststruct{3.589, -2000, 586, "here's a string", []byte{3, 4, 5, 8}}
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(256)
+	enc := json.NewEncoder(buf)
+
+	var err error
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = enc.Encode(testdat)
+		if err != nil {
+			b.Fatal(err)
+		}
+		buf.Reset()
+	}
+
 }
