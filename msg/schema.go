@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"strconv"
+	"sync"
 )
 
 const (
@@ -18,11 +19,36 @@ const (
 )
 
 var (
-	ErrTypeNotSupported = errors.New("Type not supported as Schema type") // ErrTypeNotSupported returns when creating a schema with an interface{} of unsupported type
-	ErrIncorrectType    = errors.New("Incorrect mapping of Type to type") // ErrIncorrectType is returned when value.(type) doesn't match msg.Type
-	ErrBadArgs          = errors.New("Bad arguments.")                    // ErrBadArgs is returned when arguments are malformed.
-	ErrShortSlice       = errors.New("Slice too short.")                  //ErrShortSlice is returned when an argument slice was too short.
+	// ErrTypeNotSupported returns when creating a schema with an interface{} of unsupported type
+	ErrTypeNotSupported = errors.New("Type not supported as Schema type")
+	// ErrIncorrectType is returned when value.(type) doesn't match msg.Type
+	ErrIncorrectType = errors.New("Incorrect mapping of Type to type")
+	// ErrBadArgs is returned when arguments are malformed.
+	ErrBadArgs = errors.New("Bad arguments.")
+	//ErrShortSlice is returned when an argument slice was too short.
+	ErrShortSlice = errors.New("Slice too short.")
 )
+
+var (
+	exttype = []byte("extension_type")
+	data    = []byte("data")
+	bpool   *sync.Pool
+)
+
+func init() {
+	bpool = new(sync.Pool)
+	bpool.New = func() interface{} { return make([]byte, 64) }
+}
+
+func newBytes() []byte {
+	bts, ok := bpool.Get().([]byte)
+	if !ok {
+		return bpool.New().([]byte)
+	}
+	return bts[0:0]
+}
+
+func putBytes(p []byte) { bpool.Put(p) }
 
 // Encoder wraps the Encode() method.
 // Encode should marshal information from the calling
@@ -48,7 +74,7 @@ type SelfMessager interface {
 	Encoder
 }
 
-//Schema represents an ordering of named objects
+// Schema represents an ordering of named objects
 type Schema []Object
 
 //Object represents a named object of known type
@@ -387,10 +413,14 @@ func (s *Schema) EncodeSlice(a []interface{}, w Writer) (err error) {
 // Bin values are encoded as base64 strings.
 // Each value is keyed by its Name field in the Schema.
 func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
+	// TODO: performance improvements. strconv is overkill in most cases.
+
+	// varray underlies 'empty' to pre-empt allocs on append()
+	varray := [64]byte{}
 	var nr int //totoal number of bytes read
 	var n int  //each number of bytes read
 	var err error
-	empty := []byte{}
+	empty := varray[0:0]
 	w.WriteByte(lcurly)
 
 	// Read-Write loop
@@ -400,12 +430,10 @@ func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
 			w.WriteByte(comma)
 
 		}
-		// Write Name
+		// Write Name - "name":
 		w.WriteByte(qte)
 		w.WriteString(o.Name)
 		w.WriteByte(qte)
-
-		// Write ":"
 		w.WriteByte(colon)
 
 		// Read value, write value
@@ -416,9 +444,8 @@ func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
 			if err != nil {
 				return err
 			}
-			w.WriteByte(qte)
-			w.WriteString(s)
-			w.WriteByte(qte)
+			w.Write(strconv.AppendQuote(empty, s))
+
 			nr += n
 			continue
 
@@ -468,7 +495,9 @@ func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
 			if err != nil {
 				return err
 			}
-			w.WriteString("\"" + base64.StdEncoding.EncodeToString(dat) + "\"")
+			w.WriteByte(qte)
+			w.WriteString(base64.StdEncoding.EncodeToString(dat))
+			w.WriteByte(qte)
 			nr += n
 			continue
 
@@ -481,11 +510,19 @@ func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
 				return err
 			}
 			w.WriteByte(lcurly)
-			w.WriteString("\"extension_type\":")
+			w.WriteByte(qte)
+			w.Write(exttype)
+			w.WriteByte(qte)
+			w.WriteByte(colon)
 			w.Write(strconv.AppendInt(empty, int64(etype), 10))
 			w.WriteByte(comma)
-			w.WriteString("\"data\":")
-			w.WriteString("\"" + base64.StdEncoding.EncodeToString(dat) + "\"")
+			w.WriteByte(qte)
+			w.Write(data)
+			w.WriteByte(qte)
+			w.WriteByte(colon)
+			w.WriteByte(qte)
+			w.WriteString(base64.StdEncoding.EncodeToString(dat))
+			w.WriteByte(qte)
 			w.WriteByte(rcurly)
 			nr += n
 			continue
@@ -496,11 +533,11 @@ func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
 		}
 
 	}
-
 	err = w.WriteByte(rcurly)
 	return err
 }
 
+// encode interface{} by declared Type
 func encode(v interface{}, o Object, w Writer) error {
 	switch o.T {
 	case Float:

@@ -141,6 +141,47 @@ func TestEncodeSlice(t *testing.T) {
 
 }
 
+func TestWriteJSON(t *testing.T) {
+	names := []string{"float", "int", "uint", "string", "bin"}
+	values := make([]interface{}, len(names))
+	values[0] = float64(3.589)
+	values[1] = int64(-2000)
+	values[2] = uint64(586)
+	values[3] = "blah blah blah. here's a str\"ngy thi\"ng that breaks stuff"
+	values[4] = []byte{13, 2}
+
+	s, err := MakeSchema(names, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := bytes.NewBuffer(nil)
+	buf.Grow(128)
+	outbuf := bytes.NewBuffer(nil)
+	outbuf.Grow(128)
+
+	err = s.EncodeSlice(values, buf)
+	if err != nil {
+		t.Fatalf("EncodeSlice error: %s", err.Error())
+	}
+
+	err = s.WriteJSON(buf.Bytes(), outbuf)
+	if err != nil {
+		t.Fatalf("WriteJSON error: %s", err)
+	}
+
+	t.Logf("Encoded: %s", outbuf.String())
+
+	m := make(map[string]interface{})
+	dec := json.NewDecoder(outbuf)
+	dec.UseNumber()
+	err = dec.Decode(&m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Decoded: %#v", m)
+}
+
 func BenchmarkEncodeSlice(b *testing.B) {
 	b.ReportAllocs()
 	names := []string{"float", "int", "uint", "string", "bin"}
@@ -370,14 +411,13 @@ func BenchmarkSchemaDecodeToSliceZeroCopy(b *testing.B) {
 	}
 }
 
-func BenchmarkWriteJSON(b *testing.B) {
-	names := []string{"float", "int", "uint", "string", "bin"}
+func BenchmarkReadFluxWriteJSON(b *testing.B) {
+	names := []string{"float", "int", "uint", "string"}
 	values := make([]interface{}, len(names))
 	values[0] = float64(3.589)
 	values[1] = int64(-2000)
 	values[2] = uint64(586)
 	values[3] = "here's a string"
-	values[4] = []byte{3, 4, 5, 8}
 
 	s, err := MakeSchema(names, values)
 	if err != nil {
@@ -403,24 +443,28 @@ func BenchmarkWriteJSON(b *testing.B) {
 
 }
 
-func BenchmarkStdJSON(b *testing.B) {
+func BenchmarkStdlibReadJSONWriteJSON(b *testing.B) {
 	type teststruct struct {
 		Float  float64 `json:"float"`
 		Int    int64   `json:"int"`
 		Uint   uint64  `json:"uint"`
 		String string  `json:"string"`
-		Bin    []byte  `json:"bin"`
 	}
-	testdat := &teststruct{3.589, -2000, 586, "here's a string", []byte{3, 4, 5, 8}}
+	testdat := &teststruct{3.589, -2000, 586, "here's a string"}
 	buf := bytes.NewBuffer(nil)
 	buf.Grow(256)
 	enc := json.NewEncoder(buf)
+	dec := json.NewDecoder(buf)
 
 	var err error
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = enc.Encode(testdat)
+		if err != nil {
+			b.Fatal(err)
+		}
+		err = dec.Decode(testdat)
 		if err != nil {
 			b.Fatal(err)
 		}
