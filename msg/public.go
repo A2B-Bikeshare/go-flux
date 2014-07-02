@@ -119,6 +119,12 @@ func WriteInterface(w Writer, v interface{}, t Type) error {
 //WriteFloat writes a float to a msg.Writer
 func WriteFloat(w Writer, f float64) { writeFloat(w, f) }
 
+//WriteFloat64 writes a float, but guarantees that the encoded value will be a full 64 bits
+func WriteFloat64(w Writer, f float64) { writeFloat64(w, f) }
+
+//WriteFloat32 writes a float, but guarantees that the encoded value will be 32 bits
+func WriteFloat32(w Writer, f float32) { writeFloat32(w, f) }
+
 //WriteBool writes a bool to a msg.Writer
 func WriteBool(w Writer, b bool) { writeBool(w, b) }
 
@@ -155,11 +161,39 @@ func ReadFloat(r Reader) (f float64, err error) {
 	return
 }
 
+// ReadFloat32 reads a float32
+func ReadFloat32(r Reader) (f float32, err error) {
+	f, err = readFloat32(r)
+	if err != nil {
+		if err == ErrBadTag {
+			r.UnreadByte()
+		}
+	}
+	return
+}
+
+// ReadFloat64 reads a float64
+func ReadFloat64(r Reader) (f float64, err error) {
+	f, err = readFloat64(r)
+	if err != nil {
+		if err == ErrBadTag {
+			r.UnreadByte()
+		}
+	}
+	return
+}
+
 // ReadFloatBytes returns a float64 from 'p' along with
 // the number of bytes read, or an error.
 func ReadFloatBytes(p []byte) (f float64, n int, err error) {
 	return readFloatBytes(p)
 }
+
+// ReadFloat64Bytes attempts to read a float64 out of 'p'
+func ReadFloat64Bytes(p []byte) (f float64, n int, err error) { return readFloat64Bytes(p) }
+
+// ReadFloat32Bytes attempts to read a float32 out of 'p'
+func ReadFloat32Bytes(p []byte) (f float32, n int, err error) { return readFloat32Bytes(p) }
 
 // ReadInt tries to read into an int64
 func ReadInt(r Reader) (i int64, err error) {

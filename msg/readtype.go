@@ -436,6 +436,57 @@ func readNil(r Reader) (err error) {
 	return
 }
 
+func readFloat32(r Reader) (f float32, err error) {
+	var c byte
+	var ns [4]byte
+	var fg uint32
+	c, err = r.ReadByte()
+	if err != nil {
+		return
+	}
+	if c != mfloat32 {
+		err = ErrBadTag
+		return
+	}
+
+	_, err = r.Read(ns[:4])
+	if err != nil {
+		return
+	}
+	fg = uint32(uint32(ns[3]) | (uint32(ns[2]) << 8) | (uint32(ns[1]) << 16) | (uint32(ns[0]) << 24))
+	f = *(*float32)(unsafe.Pointer(&fg))
+	return
+}
+
+func readFloat64(r Reader) (f float64, err error) {
+	var c byte
+	var ns [8]byte
+	var fg uint64
+	c, err = r.ReadByte()
+	if err != nil {
+		return
+	}
+	if c != mfloat64 {
+		err = ErrBadTag
+		return
+	}
+
+	_, err = r.Read(ns[:8])
+	if err != nil {
+		return
+	}
+	fg = uint64(uint64(ns[7]) |
+		(uint64(ns[6]) << 8) |
+		(uint64(ns[5]) << 16) |
+		(uint64(ns[4]) << 24) |
+		(uint64(ns[3]) << 32) |
+		(uint64(ns[2]) << 40) |
+		(uint64(ns[1]) << 48) |
+		(uint64(ns[0]) << 56))
+	f = *(*float64)(unsafe.Pointer(&fg))
+	return
+}
+
 func readFloat(r Reader) (f float64, err error) {
 	var c byte
 	var ns [8]byte

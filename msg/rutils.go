@@ -243,6 +243,47 @@ func readFloatBytes(p []byte) (f float64, n int, err error) {
 	}
 }
 
+func readFloat32Bytes(p []byte) (f float32, n int, err error) {
+	n = 5
+	var c byte
+	if len(p) < 5 {
+		err = ErrShortBytes
+		return
+	}
+	c = p[0]
+	if c != mfloat32 {
+		err = ErrBadTag
+		return
+	}
+	fg := uint32(uint32(p[4]) | (uint32(p[3]) << 8) | (uint32(p[2]) << 16) | (uint32(p[1]) << 24))
+	f = *(*float32)(unsafe.Pointer(&fg))
+	return
+}
+
+func readFloat64Bytes(p []byte) (f float64, n int, err error) {
+	n = 9
+	var c byte
+	if len(p) < 9 {
+		err = ErrShortBytes
+		return
+	}
+	c = p[0]
+	if c != mfloat64 {
+		err = ErrBadTag
+		return
+	}
+	fg := uint64(uint64(p[8]) |
+		(uint64(p[7]) << 8) |
+		(uint64(p[6]) << 16) |
+		(uint64(p[5]) << 24) |
+		(uint64(p[4]) << 32) |
+		(uint64(p[3]) << 40) |
+		(uint64(p[2]) << 48) |
+		(uint64(p[1]) << 56))
+	f = *(*float64)(unsafe.Pointer(&fg))
+	return
+}
+
 //note: changes to 'p' will change 's'; this is "unsafe" behavior and
 //SHOULD BE USED WITH EXTREME CARE
 func readStringZeroCopy(p []byte) (s string, n int, err error) {

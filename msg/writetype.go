@@ -75,6 +75,31 @@ func writeFloat(w Writer, f float64) {
 	}
 }
 
+func writeFloat64(w Writer, f float64) {
+	var ls uint64
+	w.WriteByte(mfloat64)
+	ls = *(*uint64)(unsafe.Pointer(&f))
+	w.WriteByte(byte(ls >> 56))
+	w.WriteByte(byte(ls >> 48))
+	w.WriteByte(byte(ls >> 40))
+	w.WriteByte(byte(ls >> 32))
+	w.WriteByte(byte(ls >> 24))
+	w.WriteByte(byte(ls >> 16))
+	w.WriteByte(byte(ls >> 8))
+	w.WriteByte(byte(ls))
+	return
+}
+
+func writeFloat32(w Writer, f float32) {
+	var is uint32
+	w.WriteByte(mfloat32)
+	is = *(*uint32)(unsafe.Pointer(&f))
+	w.WriteByte(byte(is >> 24))
+	w.WriteByte(byte(is >> 16))
+	w.WriteByte(byte(is >> 8))
+	w.WriteByte(byte(is))
+}
+
 func writeBin(w Writer, b []byte) {
 	n := len(b)
 	switch {
