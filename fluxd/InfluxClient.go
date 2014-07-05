@@ -16,6 +16,7 @@ type InfluxDB struct {
 	SeriesNameField string
 	fqaddr          string
 	once            *sync.Once
+	maps            *sync.Pool
 }
 
 // TODO

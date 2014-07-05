@@ -32,9 +32,7 @@ func (e ElasticsearchDB) Address() string {
 // Translate uses e.Schema to write json into 'w'.
 // Per the elasticsearch type specification,
 // binary types are encoded to base64-encoded quoted strings.
-func (e ElasticsearchDB) Translate(p []byte, b *bytes.Buffer) error {
-	return e.Schema.WriteJSON(p, b)
-}
+func (e ElasticsearchDB) Translate(p []byte, b *bytes.Buffer) error { return e.Schema.WriteJSON(p, b) }
 
 // Req returns the proper POST request to elasticsearch
 func (e ElasticsearchDB) Req(r io.Reader) (hr *http.Request, err error) {
