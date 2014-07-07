@@ -20,13 +20,12 @@ var (
 // InfluxDB implements the BatchBinding interface.
 // It uses the first field in the Schema as the series name.
 type InfluxDB struct {
-	Schema          msg.Schema
-	Addr            string
-	DBname          string
-	SeriesNameField string
-	fqaddr          string
-	once            *sync.Once
-	slices          *sync.Pool
+	Schema msg.Schema
+	Addr   string
+	DBname string
+	fqaddr string
+	once   *sync.Once
+	slices *sync.Pool
 }
 
 // Address returns {Addr}/db/{DBname}/series?u=root&p=root, but
@@ -53,7 +52,7 @@ func (d *InfluxDB) Translate(p []byte, w msg.Writer) error {
 	var stackbuf [64]byte
 	stackbuf[0] = 0x2c //comma
 	empty := stackbuf[1:1]
-	comma := stackbuf[0:0]
+	comma := stackbuf[0:1]
 	var n int
 	var nr int
 	var err error
@@ -72,17 +71,19 @@ func (d *InfluxDB) Translate(p []byte, w msg.Writer) error {
 	//loop and write names
 	for i := 1; i < len(d.Schema); i++ {
 		var prepend []byte
-		if i == 0 {
+		if i == 1 {
 			prepend = empty
 		} else {
 			prepend = comma
 		}
 		w.Write(strconv.AppendQuote(prepend, d.Schema[i].Name))
 	}
+
+	// loop and write points
 	w.WriteString("],\"points\":[[")
 	for i := 1; i < len(d.Schema); i++ {
 		var prepend []byte
-		if i == 0 {
+		if i == 1 {
 			prepend = empty
 		} else {
 			prepend = comma
@@ -105,6 +106,16 @@ func (d *InfluxDB) Translate(p []byte, w msg.Writer) error {
 				return err
 			}
 			w.Write(strconv.AppendFloat(prepend, f, 'f', -1, 64))
+			nr += n
+			continue
+
+		case msg.Int:
+			var i int64
+			i, n, err = msg.ReadIntBytes(p[nr:])
+			if err != nil {
+				return err
+			}
+			w.Write(strconv.AppendInt(prepend, i, 10))
 			nr += n
 			continue
 
@@ -133,6 +144,9 @@ func (d *InfluxDB) Translate(p []byte, w msg.Writer) error {
 			dat, n, err = msg.ReadBinZeroCopy(p[nr:])
 			if err != nil {
 				return err
+			}
+			if i != 1 {
+				w.Write(comma)
 			}
 			w.WriteByte('"')
 			w.WriteString(base64.StdEncoding.EncodeToString(dat))
@@ -167,6 +181,12 @@ func (d *InfluxDB) Validate(res *http.Response) error {
 	}
 	return nil
 }
+
+// EntryPrefix returns nil
+func (d *InfluxDB) EntryPrefix() []byte { return nil }
+
+// EntryPostfix returns nil
+func (d *InfluxDB) EntryPostfix() []byte { return nil }
 
 // BatchPrefix returns '['
 func (d *InfluxDB) BatchPrefix() []byte { return bprefix }

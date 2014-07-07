@@ -22,6 +22,11 @@ var (
 	bpl *sync.Pool
 )
 
+// for testing, client can be something other than http.Client
+type dclient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 func init() {
 	bpl = new(sync.Pool)
 	bpl.New = func() interface{} { return bytes.NewBuffer(make([]byte, 0, 128)) }
@@ -89,8 +94,8 @@ type BatchDB interface {
 	Concat() []byte
 }
 
-// handler for non-batched databases
-func dbHandle(db DB, r []byte, dcl *http.Client) error {
+// synchronous handler for non-batched databases
+func dbHandle(db DB, r []byte, dcl dclient) error {
 	buf := getBuf()
 	err := db.Translate(r, buf)
 	if err != nil {

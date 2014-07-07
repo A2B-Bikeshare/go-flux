@@ -253,7 +253,7 @@ type Binding struct {
 	Endpoint DB
 	// Workers sets the number of concurrent goroutines serving this binding; defaults to 1
 	Workers int
-	dcl     *http.Client  //used for database communication
+	dcl     dclient       //used for database communication
 	cons    *nsq.Consumer //used for nsq communication
 }
 
@@ -278,7 +278,7 @@ type BatchBinding struct {
 	// BatchTime sets the maximum time spend waiting to collect messages before upload; defaults to 250ms
 	BatchTime time.Duration
 
-	dcl    *http.Client       // client
+	dcl    dclient            // client
 	cons   *nsq.Consumer      // consumer
 	outbuf *bytes.Buffer      // for request body
 	accum  chan *bytes.Buffer // for accumulating responses
