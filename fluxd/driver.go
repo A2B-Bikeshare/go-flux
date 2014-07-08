@@ -17,7 +17,7 @@ var (
 
 func init() {
 	DefaultConfig = nsq.NewConfig()
-	_ = DefaultConfig.Set("max_in_flight", 25)
+	_ = DefaultConfig.Set("max_in_flight", 50)
 }
 
 // Server represents a collection of bindings
@@ -27,8 +27,11 @@ type Server struct {
 	NSQConfig *nsq.Config
 	// Address(es) of nsqlookupd(s)
 	Lookupdaddrs []string
-	bindings     []*Binding
-	batchbin     []*BatchBinding
+	// If true, requests are redirected to StdOut instead of
+	// to the http endpoint. Useful for testing.
+	UseStdout bool
+	bindings  []*Binding
+	batchbin  []*BatchBinding
 }
 
 // Stop ends all of the server processes gracefully. It does not block.
@@ -42,6 +45,7 @@ func (s *Server) Stop() {
 	for _, bb := range s.batchbin {
 		go func(bb *BatchBinding) {
 			bb.cons.Stop()
+			bb.stchan <- struct{}{}
 			return
 		}(bb)
 	}
@@ -57,6 +61,11 @@ func (s *Server) BindBatch(b *BatchBinding) { s.batchbin = append(s.batchbin, b)
 // and start the consumer, client, and handler
 func (s *Server) startrun(b *Binding) error {
 	var err error
+	err = b.Endpoint.Init()
+	if err != nil {
+		return err
+	}
+
 	b.cons, err = nsq.NewConsumer(b.Topic, b.Channel, s.NSQConfig)
 	if err != nil {
 		return err
@@ -67,9 +76,15 @@ func (s *Server) startrun(b *Binding) error {
 		return err
 	}
 
-	// default client
-	b.dcl = &http.Client{}
-	if b.Workers <= 0 {
+	if !s.UseStdout {
+		// default client
+		b.dcl = &http.Client{}
+		if b.Workers <= 0 {
+			b.Workers = 1
+		}
+	} else {
+		// use stdout
+		b.dcl = stdoutcl{}
 		b.Workers = 1
 	}
 	b.cons.SetConcurrentHandlers(b, b.Workers)
@@ -78,18 +93,23 @@ func (s *Server) startrun(b *Binding) error {
 
 func (s *Server) startbatch(b *BatchBinding) error {
 	var err error
+	err = b.Endpoint.Init()
+	if err != nil {
+		return err
+	}
+
 	b.cons, err = nsq.NewConsumer(b.Topic, b.Channel, s.NSQConfig)
 	if err != nil {
 		return err
 	}
 
-	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
-	if err != nil {
-		return err
-	}
-
-	b.dcl = &http.Client{}
-	if b.Workers < 1 {
+	if !s.UseStdout {
+		b.dcl = &http.Client{}
+		if b.Workers < 1 {
+			b.Workers = 1
+		}
+	} else {
+		b.dcl = stdoutcl{}
 		b.Workers = 1
 	}
 	if b.MaxMsg <= 0 {
@@ -102,19 +122,22 @@ func (s *Server) startbatch(b *BatchBinding) error {
 	b.outbuf = bytes.NewBuffer(nil)
 	b.outbuf.Grow(2048)
 	b.accum = make(chan *bytes.Buffer, 128)
+	b.stchan = make(chan struct{}, 1)
 
 	b.wg = new(sync.WaitGroup)
 	b.wg.Add(1)
-	go batchloop(b)
+	go batchloop(b, b.stchan)
 
 	b.cons.SetConcurrentHandlers(b, b.Workers)
-	return nil
+	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
+	return err
 }
 
-func batchloop(b *BatchBinding) {
+func batchloop(b *BatchBinding, stchan chan struct{}) {
 	var inbuf *bytes.Buffer
 	var nmsg int
 	var ok bool
+	b.outbuf.Write(b.Endpoint.BatchPrefix())
 	for {
 		select {
 		case <-time.After(b.BatchTime):
@@ -152,8 +175,7 @@ func batchloop(b *BatchBinding) {
 
 		case inbuf, ok = <-b.accum:
 			if !ok {
-				b.wg.Done()
-				return
+				goto exit
 			}
 			// write concatenator
 			if nmsg != 0 {
@@ -197,9 +219,13 @@ func batchloop(b *BatchBinding) {
 				b.outbuf.Write(b.Endpoint.BatchPrefix())
 				continue
 			}
-
+		case <-stchan:
+			goto exit
 		}
 	}
+exit:
+	b.wg.Done()
+	return
 }
 
 // Run blocks until all bindings exit gracefully, usually after a call to Stop.
@@ -214,7 +240,7 @@ func (s *Server) Run() error {
 		return err
 	}
 
-	if s.bindings == nil || (len(s.bindings) == 0 && len(s.batchbin) == 0) {
+	if len(s.bindings) == 0 && len(s.batchbin) == 0 {
 		return errors.New("No bindings registered.")
 	}
 
@@ -237,7 +263,6 @@ func (s *Server) Run() error {
 	}
 	for _, bb := range s.batchbin {
 		<-bb.cons.StopChan
-		close(bb.accum)
 		bb.wg.Wait()
 	}
 	return nil
@@ -282,6 +307,7 @@ type BatchBinding struct {
 	cons   *nsq.Consumer      // consumer
 	outbuf *bytes.Buffer      // for request body
 	accum  chan *bytes.Buffer // for accumulating responses
+	stchan chan struct{}      // stop channel
 	wg     *sync.WaitGroup    // for monitoring workers
 }
 

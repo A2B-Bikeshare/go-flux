@@ -91,7 +91,7 @@ func publoop(l *Logger, dur time.Duration) {
 	var retries int
 	buf := bytes.NewBuffer(nil)
 	//pre-emptively allocate some space
-	buf.Grow(128)
+	buf.Grow(256)
 
 	for {
 		select {

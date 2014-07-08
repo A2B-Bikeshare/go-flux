@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"sync"
 )
 
 var (
@@ -24,16 +23,18 @@ type InfluxDB struct {
 	Addr   string
 	DBname string
 	fqaddr string
-	once   *sync.Once
-	slices *sync.Pool
+}
+
+// Init must be called before the call to Server.Run()
+// in order to initialize unexported struct members.
+func (d *InfluxDB) Init() error {
+	d.fqaddr = fmt.Sprintf("%s/db/%s/series?u=root&p=root", d.Addr, d.DBname)
+	return nil
 }
 
 // Address returns {Addr}/db/{DBname}/series?u=root&p=root, but
 // only computes the string once.
 func (d *InfluxDB) Address() string {
-	d.once.Do(func() {
-		d.fqaddr = fmt.Sprintf("%s/db/%s/series?u=root&p=root", d.Addr, d.DBname)
-	})
 	return d.fqaddr
 }
 

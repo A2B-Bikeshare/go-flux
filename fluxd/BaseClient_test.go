@@ -1,7 +1,6 @@
 package fluxd
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -32,10 +31,4 @@ func (c *testClient) DumpRequests() {
 	}
 }
 
-func dump(r *http.Request) {
-	fmt.Println("------------ REQUEST -------------")
-	fmt.Printf("Method: %s\n", r.Method)
-	fmt.Printf("Address: %s\n", r.URL.String())
-	fmt.Printf("Body:\n%s\n", r.Body)
-	fmt.Println("----------------------------------")
-}
+func (c *testClient) Requests() []*http.Request { return c.reqs }

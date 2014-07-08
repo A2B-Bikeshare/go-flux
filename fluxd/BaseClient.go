@@ -48,6 +48,11 @@ func putBuf(b *bytes.Buffer) {
 // DB is the interface that fluxd uses to communicate with a database.
 // All calls should be thread-safe.
 type DB interface {
+	// Init gives you an opportunity to do custom initialization and
+	// validation on the DB. Calls to Server.Run will cause the
+	// driver to call Init() exactly once.
+	Init() error
+
 	// Translate should turn the body of an NSQ message
 	// into a valid body to be used to write
 	// to the database.

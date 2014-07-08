@@ -34,7 +34,7 @@ func (e ElasticsearchDB) Address() string {
 // binary types are encoded to base64-encoded quoted strings.
 func (e ElasticsearchDB) Translate(p []byte, b *bytes.Buffer) error { return e.Schema.WriteJSON(p, b) }
 
-// Req returns the proper POST request to elasticsearch
+// Req returns the proper POST request to Addr/Index/Dtype
 func (e ElasticsearchDB) Req(r io.Reader) (hr *http.Request, err error) {
 	hr, err = http.NewRequest("POST", e.Address(), r)
 	return

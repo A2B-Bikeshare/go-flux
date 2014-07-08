@@ -40,77 +40,147 @@ wasted to save heap allocations.)
 
 TL;DR you can saturate your Gigabit connection if you want to.
 
-Examples
+Quick Start
 -----------
-### Struct flux/msg manual encoding/decoding
-Here's an example of implementing custom encoding/decoding for a simple struct, which is one of the most highly performant (albiet verbose)
-ways to marshal/unmarshal messages and avoid allocations.
-```go
-// github.com/philhofer/go-flux/msg/examples/struct_example.go
+Let's examine the contents of these two files:
 
+/cmd/demo/client.go
+```go
 package main
 
 import (
-  "bytes"
   "fmt"
-  "github.com/philhofer/go-flux/msg"
+  "github.com/A2B-Bikeshare/go-flux/log"
+  "github.com/A2B-Bikeshare/go-flux/msg"
 )
 
-// Person - the struct we want to encode/decode
-type Person struct {
+// This is structure of the message we are sending
+type Tele struct {
   Name string
-  Age  int64 // needs to be int64 to interact transparently with msg.WriteInt() and msg.ReadInt()
+  Dir  string
+  Val  float64
+  Uid  uint64
+  Chrg int64
 }
 
-// WriteFluxMsg - a method to encode the struct as a flux msg
-func (p *Person) WriteFluxMsg(w msg.Writer) {
-  msg.WriteString(w, p.Name)
-  msg.WriteInt(w, p.Age)
-}
-
-// FromFluxMsg - a method to decode the struct as a flux msg
-func (p *Person) FromFluxMsg(r msg.Reader) error {
-
-  // Note that the order of reads
-  // is the same as the order of writes.
-  // Any other arrangement will fail.
-  // fluxmsg encoding/decoding is always typed AND ordered.
-
-  newname, err := msg.ReadString(r)
-  if err != nil {
-    return err
-  }
-  newage, err := msg.ReadInt(r)
-  if err != nil {
-    return err
-  }
-  p.Name, p.Age = newname, newage
+// Encode fulfills the msg.Encoder interface;
+// this defines how the message should be encoded
+// on the wire.
+func (t *Tele) Encode(w msg.Writer) error {
+  msg.WriteString(w, t.Name)
+  msg.WriteString(w, t.Dir)
+  msg.WriteFloat64(w, t.Val)
+  msg.WriteUint(w, t.Uid)
+  msg.WriteInt(w, t.Chrg)
   return nil
 }
 
 func main() {
-  //make a Person; write to a buffer
-  bob := &Person{Name: "Bob", Age: 32}
-  buf := bytes.NewBuffer(nil)
-  //*bytes.Buffer implements the msg.Writer interface
-  bob.WriteFluxMsg(buf)
-
-  //Print the hex-encoded representation of the message
-  fmt.Printf("Bob encoded to '%x'\n", buf.Bytes())
-  // Output:
-  // Bob encoded to 'a3426f6220'
-
-  //Make a new Person; read in values from a buffer
-  newbob := &Person{}
-  err := newbob.FromFluxMsg(buf)
+  // create a new logger instance writing to "demotopic" on the local nsqd instance
+  fluxl, err := log.NewLogger("demotopic", ":4150", "")
   if err != nil {
-    fmt.Println(err)
-    return
+    panic(err)
   }
 
-  //Print the value of the new person
-  fmt.Printf("New Bob decoded as %v\n", *newbob)
-  // Output:
-  // New Bob decoded as {Bob 32}
+  // create a new Tele object
+  newtele := &Tele{"ERROR", "/bin", 1.388, 67890, -1}
+
+  // send it NSQ
+  fluxl.Send(newtele)
+
+  // close
+  fluxl.Close()
+  fmt.Println("Message sent.")
 }
 ```
+
+/cmd/demo/server.go
+```go
+package main
+
+import (
+  "fmt"
+  "github.com/A2B-Bikeshare/go-flux/fluxd"
+  "github.com/A2B-Bikeshare/go-flux/msg"
+)
+
+// This schema defines how we decode the Tele
+// object. We could have used a Schema object
+// on the client side instead of a struct,
+// if we wanted to.
+var TeleSchema = msg.Schema{
+  {Name: "name", T: msg.String},
+  {Name: "dir", T: msg.String},
+  {Name: "val", T: msg.Float},
+  {Name: "uid", T: msg.Uint},
+  {Name: "chrg", T: msg.Int},
+}
+
+// This binding tells the server
+// how to decode messages and write them
+// to a database. In this case, we're
+// using the built-in batching InfluxDB
+// writer.
+var TeleBinding = &fluxd.BatchBinding{
+  Topic:   "demotopic",
+  Channel: "demo_recv",
+  Endpoint: &fluxd.InfluxDB{
+    Schema: TeleSchema,
+    Addr:   "localhost:8083",
+    DBname: "test",
+  },
+}
+
+func main() {
+  // This creates our server, which polls for
+  // topics from the nsqdlookupd(s) running
+  // at the address(es) supplied. The 'UseStdout'
+  // option bypasses http requests to the database
+  // and instead formats the requests and writes them to
+  // standard out.
+  srv := &fluxd.Server{
+    Lookupdaddrs: []string{"127.0.0.1:4161"},
+    UseStdout:    true,
+  }
+
+  // Bind out binding
+  srv.BindBatch(TeleBinding)
+  fmt.Println("Initializing server...")
+
+  // Run the server
+  err := srv.Run()
+  if err != nil {
+    fmt.Println(err)
+  }
+}
+```
+
+To run this example, first open up a shell window and start an nsqlookupd:
+```
+$> nsqlookupd
+```
+Then, in another window, start up nsqd pointed to the nsqlookupd:
+```
+$> nsq --lookupd-tcp-address=127.0.0.1:4160
+```
+Then, in yet another terminal, have the client send a message:
+```
+$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/cmd/demo/client/client.go
+...
+"Message sent."
+```
+And then, finally, have the server receive the message:
+```
+$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/cmd/demo/server/server.go
+...
+--------- SERVER REQUEST ---------
+Method: POST
+Address: localhost:8083/db/test/series?u=root&p=root
+Body:
+[{"name":"ERROR","columns":["dir","val","uid","chrg"],"points":[["/bin",1.388,67890,-1]]}]
+----------------------------------
+```
+
+Notice that the client and server don't have to be running at the same time. We could have started the server
+and then started the client, and we would have achieved the same result. You can have the client send
+hundreds of requests at a time, and the server will batch them up and upload them as they are received.

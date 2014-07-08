@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -17,7 +18,16 @@ func dump(r *http.Request) {
 	fmt.Println("----------------------------------")
 }
 
+var (
+	addr string
+)
+
+func init() {
+	flag.StringVar(&addr, "b", ":8092", "Bind address")
+}
+
 func main() {
+	flag.Parse()
 	writeLock := new(sync.Mutex)
 
 	mux := http.NewServeMux()
@@ -30,7 +40,7 @@ func main() {
 
 	srv := &http.Server{}
 	srv.Handler = mux
-	srv.Addr = ":8092"
-	log.Print("Listening on :8092")
+	srv.Addr = addr
+	log.Printf("Listening on %s", srv.Addr)
 	log.Fatal(srv.ListenAndServe())
 }
