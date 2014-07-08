@@ -87,7 +87,7 @@ func (s *Server) startrun(b *Binding) error {
 		b.dcl = stdoutcl{}
 		b.Workers = 1
 	}
-	b.cons.SetConcurrentHandlers(b, b.Workers)
+	b.cons.SetConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
 	return nil
 }
 
@@ -128,7 +128,7 @@ func (s *Server) startbatch(b *BatchBinding) error {
 	b.wg.Add(1)
 	go batchloop(b, b.stchan)
 
-	b.cons.SetConcurrentHandlers(b, b.Workers)
+	b.cons.SetConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
 	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
 	return err
 }
@@ -311,13 +311,13 @@ type BatchBinding struct {
 	wg     *sync.WaitGroup    // for monitoring workers
 }
 
-// HandleMessage implements the nsq.Handler interface
-func (b *Binding) HandleMessage(msg *nsq.Message) error {
+// implements the nsq.HandleFunc interface
+func (b *Binding) handle(msg *nsq.Message) error {
 	return dbHandle(b.Endpoint, msg.Body, b.dcl)
 }
 
-// HandleMessage implements the nsq.Handler interface
-func (b *BatchBinding) HandleMessage(msg *nsq.Message) error {
+// implements the nsq.HandleFunc interface
+func (b *BatchBinding) handle(msg *nsq.Message) error {
 	buf := getBuf()
 	err := b.Endpoint.Translate(msg.Body, buf)
 	if err != nil {
