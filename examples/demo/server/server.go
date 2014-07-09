@@ -35,6 +35,8 @@ func main() {
 	fmt.Println("Initializing server...")
 	err := srv.Run()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("ERROR: %s\n", err.Error())
+	} else {
+		fmt.Println("Exited normally.")
 	}
 }

@@ -1,7 +1,6 @@
 package msg
 
 import (
-	"bytes"
 	"encoding/base64"
 	"errors"
 	"strconv"
@@ -412,7 +411,7 @@ func (s *Schema) EncodeSlice(a []interface{}, w Writer) (err error) {
 // values are encoded as {"extension_type":<int8>, "data":<base64 string>}.
 // Bin values are encoded as base64 strings.
 // Each value is keyed by its Name field in the Schema.
-func (s *Schema) WriteJSON(p []byte, w *bytes.Buffer) error {
+func (s *Schema) WriteJSON(p []byte, w Writer) error {
 	// TODO: performance improvements. strconv is overkill in most cases.
 
 	// varray underlies 'empty' to pre-empt allocs on append()

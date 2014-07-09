@@ -71,10 +71,6 @@ func (s *Server) startrun(b *Binding) error {
 		return err
 	}
 
-	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
-	if err != nil {
-		return err
-	}
 
 	if !s.UseStdout {
 		// default client
@@ -88,7 +84,8 @@ func (s *Server) startrun(b *Binding) error {
 		b.Workers = 1
 	}
 	b.cons.SetConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
-	return nil
+	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
+	return err
 }
 
 func (s *Server) startbatch(b *BatchBinding) error {

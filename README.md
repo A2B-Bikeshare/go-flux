@@ -9,8 +9,9 @@ Note: Fluxlog is currently under *heavy* development. The API is unstable and so
 
 Flux is designed to deliver small messages across your infrastructure quickly and reliably. The fact that flux is built
 around NSQ means that messages have much more durability than they would otherwise. Additionally, flux ships with a special serializer
-that significantly reduces encoding/decoding overhead and overall message size. Flux is great for telemetry data and streaming logs, or
-any other data that doesn't need write immediacy. (Flux and NSQ trade immediacy/latency for throughput and durability.)
+that significantly reduces encoding/decoding overhead and overall message size, and you can use Go as your Schema
+language. Flux is great for telemetry data and streaming logs, or any other data that doesn't need write immediacy.
+(Flux and NSQ trade immediacy/latency for throughput and durability.)
 
 Flux has three parts:
   - flux/msg contains the encode/decode API for flux messages
@@ -18,16 +19,16 @@ Flux has three parts:
   - flux/fluxd contains the API for reading flux messages from an [NSQ](http://nsq.io) topic and writing them to a supported database.
 
 Currently, I have plans to implement streaming JSON encoders to turn flux messages into [Elasticsearch](http://elasticsearch.org)- and [InfluxDB](http://influxdb.com)-compatible JSON.
-We're looking for contributor for other database bindings. (MongoDB, RethinkDB, Neo4j, Riak...)
+We're looking for contributors for other database bindings (MongoDB, RethinkDB, Neo4j, Riak...).
 
 Note that flux/log and flux/fluxd do not *require* you to use flux/msg encoding. However, the library's built-in DB
 interfaces are designed for flux/msg encoding, so you would have to roll your own.
 
 Quick Start
 -----------
-Let's examine the contents of these two files, located in the /cmd subdirectory:
+Let's examine the contents of these two files, located in the /examples/ subdirectory:
 
-/cmd/demo/client/client.go
+/examples/demo/client/client.go
 ```go
 package main
 
@@ -77,7 +78,7 @@ func main() {
 }
 ```
 
-/cmd/demo/server/server.go
+/examples/demo/server/server.go
 ```go
 package main
 
@@ -148,13 +149,13 @@ $> nsq --lookupd-tcp-address=127.0.0.1:4160
 ```
 Then, in yet another terminal, have the client send a message:
 ```
-$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/cmd/demo/client/client.go
+$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/examples/demo/client/client.go
 ...
 "Message sent."
 ```
 And then, finally, have the server receive the message:
 ```
-$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/cmd/demo/server/server.go
+$> go run $GOPATH/src/github.com/A2B-Bikeshare/go-flux/examples/demo/server/server.go
 ...
 --------- SERVER REQUEST ---------
 Method: POST
@@ -167,6 +168,8 @@ Body:
 Notice that the client and server don't have to be running at the same time. We could have started the server
 and then started the client, and we would have achieved the same result. You can have the client send
 hundreds of requests at a time, and the server will batch them up and upload them as they are received.
+If you set the `Server.UseStdout` option to `false` and boot up InfluxDB running locally,
+you can watch the messages sent by the client get uploaded to the database.
 
 Performance
 -------------
@@ -176,7 +179,7 @@ save quite a bit of space over the wire. Encode/Decode methods are optimized for
 If you have big messages (and small keys), the only real advantage flux/msg has is the lack of type reflection overhead. (Additionally, schemas
 have shortcut methods for marshaling messages to JSON, which can be highly performant in the case that you need to communicate with your database, etc. in JSON.)
 
-Fluxlog's encode/decode performance comes from a couple different design decisions:
+Flux/log's encode/decode performance comes from a couple different design decisions:
   - "Messages" are statically-typed orderings of data.
   - Type reflection is done *once* per message 'type', rather than at every call to Decode(). A message 'type' is called a Schema.
   - Since schemas contain the data keys, the keys themselves are not serialized.
