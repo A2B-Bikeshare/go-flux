@@ -1,4 +1,4 @@
-Flux for Go [![GoDoc](https://godoc.org/github.com/A2B-Bikeshare/go-flux?status.png)](https://godoc.org/github.com/A2B-Bikeshare/go-flux) [![Stories in Ready](https://badge.waffle.io/a2b-bikeshare/go-flux.png?label=ready&title=Ready)](https://waffle.io/a2b-bikeshare/go-flux)
+Flux for Go [![GoDoc](https://godoc.org/github.com/A2B-Bikeshare/go-flux?status.png)](https://godoc.org/github.com/A2B-Bikeshare/go-flux) [![Stories in Ready](https://badge.waffle.io/a2b-bikeshare/go-flux.png?label=ready&title=Ready)](https://waffle.io/a2b-bikeshare/go-flux) [![Build Status](https://travis-ci.org/A2B-Bikeshare/go-flux.svg?branch=master)](https://travis-ci.org/A2B-Bikeshare/go-flux)
 =====================
 Write *all the messages*.
 Powered by [NSQ](http://nsq.io/) and a custom dialect of [MessagePack](http://msgpack.org).
