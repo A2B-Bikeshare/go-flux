@@ -145,7 +145,7 @@ $> nsqlookupd
 ```
 Then, in another window, start up nsqd pointed to the nsqlookupd:
 ```
-$> nsq --lookupd-tcp-address=127.0.0.1:4160
+$> nsqd --lookupd-tcp-address=127.0.0.1:4160
 ```
 Then, in yet another terminal, have the client send a message:
 ```
