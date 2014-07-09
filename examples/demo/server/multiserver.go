@@ -1,3 +1,13 @@
+/*
+This example demonstrates the power of NSQ's channels.
+Each message sent on the "demotopic" topic gets copied
+to all of its channels, so both "demo_recv" and "demo_es_recv"
+will receive copies of the messages. Here, we use the same Schema
+in two different database bindings. Also, notice that we're
+using os/signal to catch SIGINT/SIGKILL and stopping the
+server gracefully, which waits for all of the handlers
+to complete any remaining database transactions.
+*/
 package main
 
 import (
@@ -52,12 +62,16 @@ func main() {
   srv.BindBatch(InfluxBinding)
 
   fmt.Println("Initializing server...")
+
+  // catch SIGINT/SIGKILL and close gracefully
   sigs := make(chan os.Signal, 1)
   signal.Notify(sigs, os.Kill, os.Interrupt)
   go func() {
     <-sigs
     srv.Stop()
   }()
+
+  // run the server
   err := srv.Run()
   if err != nil {
     fmt.Printf("ERROR: %s\n", err.Error())
