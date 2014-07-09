@@ -32,10 +32,14 @@ type Server struct {
 	UseStdout bool
 	bindings  []*Binding
 	batchbin  []*BatchBinding
+	lock      *sync.Mutex //lock everything on initialization
+	running   bool
 }
 
 // Stop ends all of the server processes gracefully. It does not block.
 func (s *Server) Stop() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	for _, b := range s.bindings {
 		go func(b *Binding) {
 			b.cons.Stop()
@@ -52,15 +56,34 @@ func (s *Server) Stop() {
 }
 
 // Bind adds a binding to the server. Bind must be called before Run.
-func (s *Server) Bind(b *Binding) { s.bindings = append(s.bindings, b) }
+func (s *Server) Bind(b *Binding) {
+	if s.lock == nil {
+		s.lock = new(sync.Mutex)
+	}
+	if b == nil {
+		panic("Cannot add nil binding.")
+	}
+	s.bindings = append(s.bindings, b)
+}
 
 // BindBatch adds a batched binding to the server. Bind must be called before Run.
-func (s *Server) BindBatch(b *BatchBinding) { s.batchbin = append(s.batchbin, b) }
+func (s *Server) BindBatch(b *BatchBinding) {
+	if s.lock == nil {
+		s.lock = new(sync.Mutex)
+	}
+	if b == nil {
+		panic("Cannot add nil binding.")
+	}
+	s.batchbin = append(s.batchbin, b)
+}
 
 // use server config and addrs to configure a binding
 // and start the consumer, client, and handler
 func (s *Server) startrun(b *Binding) error {
 	var err error
+	b.lock = new(sync.Mutex)
+	b.lock.Lock()
+	defer b.lock.Unlock()
 	err = b.Endpoint.Init()
 	if err != nil {
 		return err
@@ -70,7 +93,6 @@ func (s *Server) startrun(b *Binding) error {
 	if err != nil {
 		return err
 	}
-
 
 	if !s.UseStdout {
 		// default client
@@ -90,6 +112,9 @@ func (s *Server) startrun(b *Binding) error {
 
 func (s *Server) startbatch(b *BatchBinding) error {
 	var err error
+	b.lock = new(sync.Mutex)
+	b.lock.Lock()
+	defer b.lock.Unlock()
 	err = b.Endpoint.Init()
 	if err != nil {
 		return err
@@ -228,22 +253,25 @@ exit:
 // Run blocks until all bindings exit gracefully, usually after a call to Stop.
 // Run immediately returns an error if the server is not configured correctly.
 func (s *Server) Run() error {
+	if len(s.bindings) == 0 && len(s.batchbin) == 0 {
+		return errors.New("No bindings registered.")
+	}
+	s.lock.Lock()
+
 	var err error
 	if s.NSQConfig == nil {
 		s.NSQConfig = DefaultConfig
 	}
 	err = s.NSQConfig.Validate()
 	if err != nil {
+		s.lock.Unlock()
 		return err
-	}
-
-	if len(s.bindings) == 0 && len(s.batchbin) == 0 {
-		return errors.New("No bindings registered.")
 	}
 
 	for _, b := range s.bindings {
 		err = s.startrun(b)
 		if err != nil {
+			s.lock.Unlock()
 			return err
 		}
 	}
@@ -251,9 +279,12 @@ func (s *Server) Run() error {
 	for _, b := range s.batchbin {
 		err = s.startbatch(b)
 		if err != nil {
+			s.lock.Unlock()
 			return err
 		}
 	}
+	s.lock.Unlock()
+
 	// block until graceful stop
 	for _, b := range s.bindings {
 		<-b.cons.StopChan
@@ -277,6 +308,7 @@ type Binding struct {
 	Workers int
 	dcl     dclient       //used for database communication
 	cons    *nsq.Consumer //used for nsq communication
+	lock    *sync.Mutex   //lock everything on initialization
 }
 
 // BatchBinding types connect NSQ channels, flux/msg schemas, and database endpoints,
@@ -306,6 +338,7 @@ type BatchBinding struct {
 	accum  chan *bytes.Buffer // for accumulating responses
 	stchan chan struct{}      // stop channel
 	wg     *sync.WaitGroup    // for monitoring workers
+	lock   *sync.Mutex        //Lock everything on initialization
 }
 
 // implements the nsq.HandleFunc interface
