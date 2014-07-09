@@ -5,17 +5,16 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 )
 
 // stdout client
 type stdoutcl struct{}
 
 func dump(r *http.Request) {
+	body, _ := httputil.DumpRequest(r, true)
 	fmt.Println("--------- SERVER REQUEST ---------")
-	fmt.Printf("Method: %s\n", r.Method)
-	fmt.Printf("Address: %s\n", r.URL.String())
-	body, _ := ioutil.ReadAll(r.Body)
-	fmt.Printf("Body:\n%s\n", body)
+	fmt.Printf("%s\n", body)
 	fmt.Println("----------------------------------")
 }
 
