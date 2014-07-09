@@ -42,22 +42,6 @@ func logMsgs(l *Logger, msgs []Msg) {
 	}
 }
 
-func TestConnection(t *testing.T) {
-	t.Skip("TODO")
-	// malformed
-	t.Log("Testing connection...")
-	conn := nsq.NewConn("localhost:4150", defaultConfig)
-	id, err := conn.Connect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(id)
-	time.Sleep(100 * time.Millisecond)
-	conn.Close()
-	t.Log("Success.")
-	return
-}
-
 func TestLogMessage(t *testing.T) {
 	rand.Seed(time.Now().Unix())
 	NMSG := 5   //number of messages sent
@@ -77,7 +61,7 @@ func TestLogMessage(t *testing.T) {
 	}
 	t.Log("Setting consumer HandlerFunc...")
 	bufs := make(chan *Entry)
-	csm.SetHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+	csm.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
 		msg := new(Entry)
 		err := msg.Decode(bytes.NewReader(m.Body))
 		if err != nil {
@@ -99,8 +83,6 @@ func TestLogMessage(t *testing.T) {
 		t.Logf("Logging message %v...", msg)
 	}
 	logMsgs(l, msgs)
-	//ensure everything gets delivered
-	time.Sleep(500 * time.Millisecond)
 
 	// COUNT MESSAGES //
 	counter := 0
@@ -123,7 +105,6 @@ func TestLogMessage(t *testing.T) {
 	t.Log("Cleaning up...")
 	//cleanup
 	csm.Stop()
-	time.Sleep(100 * time.Millisecond)
 	close(bufs)
 	l.Close()
 	t.Log("Done.")
@@ -133,7 +114,7 @@ func TestLogMessage(t *testing.T) {
 // benchmark end-to-end performance
 func BenchmarkLogMessage(b *testing.B) {
 	rand.Seed(time.Now().Unix())
-	NMSG := b.N / 10000
+	NMSG := b.N / 1000
 
 	l, err := NewLogger("test", "localhost:4150", "")
 	if err != nil {
@@ -146,7 +127,7 @@ func BenchmarkLogMessage(b *testing.B) {
 		b.Fatal(err)
 	}
 	bufs := make(chan *Entry)
-	csm.SetHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+	csm.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
 		msg := new(Entry)
 		err := msg.Decode(bytes.NewReader(m.Body))
 		if err != nil {
@@ -185,7 +166,6 @@ func BenchmarkLogMessage(b *testing.B) {
 	// CLEANUP //
 	//cleanup
 	csm.Stop()
-	time.Sleep(100 * time.Millisecond)
 	close(bufs)
 	l.Close()
 	return
