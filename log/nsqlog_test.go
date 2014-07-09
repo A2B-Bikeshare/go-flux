@@ -112,7 +112,7 @@ func TestLogMessage(t *testing.T) {
 }
 
 // benchmark end-to-end performance
-func BenchmarkLogMessage(b *testing.B) {
+func BenchmarkLogEndToEnd(b *testing.B) {
 	rand.Seed(time.Now().Unix())
 	NMSG := b.N / 1000
 
