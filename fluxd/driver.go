@@ -83,7 +83,7 @@ func (s *Server) startrun(b *Binding) error {
 		b.dcl = stdoutcl{}
 		b.Workers = 1
 	}
-	b.cons.SetConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
+	b.cons.AddConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
 	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
 	return err
 }
@@ -125,7 +125,7 @@ func (s *Server) startbatch(b *BatchBinding) error {
 	b.wg.Add(1)
 	go batchloop(b, b.stchan)
 
-	b.cons.SetConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
+	b.cons.AddConcurrentHandlers(nsq.HandlerFunc(b.handle), b.Workers)
 	err = b.cons.ConnectToNSQLookupds(s.Lookupdaddrs)
 	return err
 }
