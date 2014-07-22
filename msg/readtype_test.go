@@ -255,7 +255,7 @@ func TestReadIntBytes(t *testing.T) {
 	var shortpos int64 = 5               //pos fixint
 	var shortneg int64 = -3              //neg fixint
 	var mediumpos int64 = 200            //pos int8
-	var mediumneg int64 = -85            //neg int8
+	var mediumneg int64 = -85            //neg int16
 	var longpos int64 = 15000            //pos int16
 	var longneg int64 = -12480           //neg int16
 	var longerpos int64 = 1073741824     //pos int32
