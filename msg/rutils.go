@@ -9,7 +9,7 @@ import (
 // base for zero-copy public methods
 
 func rint8(p []byte) int64 {
-	return int64(int8(p[0]))
+	return int64(p[0])
 }
 
 func rint16(p []byte) int64 {
@@ -32,7 +32,7 @@ func rint64(p []byte) int64 {
 }
 
 func ruint8(p []byte) uint64 {
-	return uint64(uint8(p[0]))
+	return uint64(p[0])
 }
 
 func ruint16(p []byte) uint64 {

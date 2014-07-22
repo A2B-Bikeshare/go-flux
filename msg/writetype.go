@@ -239,11 +239,6 @@ func writeInt(w Writer, v int64) {
 		case v >= -32:
 			w.WriteByte(byte(v))
 
-		//write int8
-		case v >= -1<<7:
-			w.WriteByte(mint8)
-			w.WriteByte(byte(v))
-
 		//write int16
 		case v >= -1<<15:
 			w.WriteByte(mint16)

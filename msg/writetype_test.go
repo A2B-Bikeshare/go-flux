@@ -192,7 +192,7 @@ func TestNegIntWrite(t *testing.T) {
 
 	//positive integers
 	var fix int64 = -3              //negative fixint
-	var small int64 = -100          //int8
+	var small int64 = 200           //int8
 	var med int64 = -15000          //int16
 	var large int64 = -1073741824   //int32
 	var huge int64 = -1099511627776 //int64

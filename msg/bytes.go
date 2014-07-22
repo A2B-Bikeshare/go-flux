@@ -67,7 +67,7 @@ const (
 	Uint
 	//Map represents a MessagePack map type
 	String
-	//Nil represents the MessagePack 'nil' type
+	//Bool is a boolean
 	Bool
 	//Bin represents a MessagePack Bin type
 	Bin

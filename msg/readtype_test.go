@@ -205,10 +205,22 @@ func TestReadUintBytes(t *testing.T) {
 	}
 }
 
+func TestFindInt8Bug(t *testing.T) {
+	var i int64
+	buf := bytes.NewBuffer(nil)
+	for i = 128; i < 256; i++ {
+		writeInt(buf, i)
+		v, _ := readInt(buf)
+		if v != i {
+			t.Errorf("%d in, %d out", i, v)
+		}
+	}
+}
+
 func TestReadInt(t *testing.T) {
 	var shortpos int64 = 5               //pos fixint
 	var shortneg int64 = -3              //neg fixint
-	var mediumpos int64 = 100            //pos int8
+	var mediumpos int64 = 201            //pos int8
 	var mediumneg int64 = -85            //neg int8
 	var longpos int64 = 15000            //pos int16
 	var longneg int64 = -12480           //neg int16
@@ -242,7 +254,7 @@ func TestReadInt(t *testing.T) {
 func TestReadIntBytes(t *testing.T) {
 	var shortpos int64 = 5               //pos fixint
 	var shortneg int64 = -3              //neg fixint
-	var mediumpos int64 = 100            //pos int8
+	var mediumpos int64 = 200            //pos int8
 	var mediumneg int64 = -85            //neg int8
 	var longpos int64 = 15000            //pos int16
 	var longneg int64 = -12480           //neg int16

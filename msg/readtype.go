@@ -61,7 +61,7 @@ func readInt(r Reader) (i int64, err error) {
 		if err != nil {
 			return
 		}
-		i = int64(int8(n))
+		i = int64(n)
 		return
 	case mint16:
 		_, err = r.Read(bs[:2])
